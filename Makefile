@@ -79,6 +79,8 @@ $T/have_testfiles:
 	echo 'this is static file "sub2/test"' >$F/sub2/test
 	mkdir -p $T/sub2
 	mkdir -p $T/sub3
+	mknod $F/sub2/null c 1 3
+	mknod $F/sub2/fifo p
 	echo 'this is file "test"' > $T/test
 	echo 'this is overlayed file "sub2/test"' > $T/sub2/test
 	echo 'this is file "sub2/dynamic"' > $T/sub2/dynamic
@@ -121,6 +123,9 @@ test: $M.o testfiles
 	-cat $F/link8/test
 	-cat $F/sub/../sub3/test
 	-cat $F/sub3/../sub/test
+	-echo devices are bad... > $F/sub2/null
+	-cat $F/sub2/null
+	-test `ls $F/sub2/test*|wc -l` -ge 2 && echo we have multiple dir-entries
 	-$F/sub2/exectest
 	-echo echo appended >>$F/sub2/exectest
 	-$F/sub2/exectest
@@ -166,7 +171,7 @@ ktest: $M.o
 testrun:
 	-rm -rf $F $T /tmp/linktest
 	make testfiles all > /dev/null
-	make test | diff -u testrun2.txt -
+	make test 2>&1 | diff -u testrun2.txt -
 clean:
 	-rm -f *.o *.rej *.[ch].orig $E.[ch]
 distclean: mrproper
