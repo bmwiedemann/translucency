@@ -116,6 +116,11 @@ int translucent_create_whiteout(char *file) {
 	return 0;
 }
 
+/** create a copy of a regular file in overlay
+	@param nd specifies underlay - source to copy
+	@param nnew specifies new entry - destination
+	@return 0 on success, -ECODE otherwise
+*/
 int translucent_copy(struct nameidata *nd, struct nameidata *nnew, int lookup_flags) {
 	char *p, *buf, *pathbuf;
 	ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[__NR_write];	
@@ -165,6 +170,33 @@ out_free:
         free(pathbuf);
 	return result;
 }
+
+/** create a copy of a symlink in overlay
+	@param nd specifies underlay - source to copy
+	@param nnew specifies new entry - destination
+	@return 0 on success, -ECODE otherwise
+*/
+int translucent_copylink(struct nameidata *nd, struct nameidata *nnew, int lookup_flags) {
+	char *p, *buf, *pathbuf;
+	int result;
+	buf=malloc(REDIR_BUFSIZE+1);
+	pathbuf=malloc(REDIR_BUFSIZE+1);
+	p=d_path(nd->dentry, nd->mnt, pathbuf, REDIR_BUFSIZE);
+	BEGIN_KMEM
+		result=orig_sys_readlink(p, buf, REDIR_BUFSIZE);
+	END_KMEM
+	if(result>=0) {
+		buf[result]=0;
+		p=d_path(nnew->dentry, nnew->mnt, pathbuf, REDIR_BUFSIZE);
+		BEGIN_KMEM
+			result=orig_sys_symlink(buf, p);
+		END_KMEM
+	}
+	free(pathbuf);
+	free(buf);
+	return result;
+}
+
 
 int translucent_mkdir(struct nameidata *nd, struct nameidata *n, int mode, struct translucent *t) {
 	char *p, *buf;
@@ -494,6 +526,7 @@ int redirect_path_walk(char *name, char **endp,
 		                if(is_special(&n[j])) {
                                        if(S_ISDIR(mode) && (lflags&LOOKUP_CREATE)) mymkdir2(&n[j], &n[t->layers-1], t);
 			               else if((lflags&LOOKUP_NOSPECIAL)) error = -1; // no mknod on echo > /dev/null , cow on fifo and socket does not make sense, copying symlinks is unnecessary
+				       else if((lflags&LOOKUP_CREATE) && S_ISLNK(mode) && !(translucent_flags&no_copyonwrite)) error=translucent_copylink(&n[j],&n[t->layers-1],lflags);
 			               else if((lflags&LOOKUP_CREATE) && (S_ISBLK(mode) || S_ISCHR(mode)) && !(translucent_flags&no_copyonwrite)) {
 				               // this is inlined quasi "mymknod"
 				               char *buf=malloc(REDIR_BUFSIZE+1),*p=namei_to_path(&n[t->layers-1],buf);
