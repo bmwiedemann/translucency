@@ -184,3 +184,43 @@ int redirecting_sys_symlink(const char *oldpath, const char *newpath)
 	return orig_sys_symlink(oldpath, newpath);
 }
 #endif
+
+
+#if defined(__NR_socketcall)
+#include <linux/un.h>
+/// catch bind+connect syscall for named AF_UNIX sockets - needed for syslog, gpm, nscd and resmgr
+int redirecting_sys_socketcall(int call, unsigned long *args)
+{
+        if(call==SYS_BIND || call==SYS_CONNECT) {
+		struct sockaddr sa;
+		unsigned long largs[3];
+		if(copy_from_user(largs, args, sizeof(largs))) return -EFAULT;
+		if(copy_from_user(&sa, (void *)largs[1], sizeof(sa))) return -EFAULT;
+		if(sa.sa_family==AF_UNIX) {
+			struct sockaddr_un local1;
+			char local0[REDIR_BUFSIZE];
+			unsigned int len2;
+			largs[2]-=sizeof(local1.sun_family);
+			if(largs[2]>sizeof(local1.sun_path)) largs[2]=sizeof(local1.sun_path);
+			if(copy_from_user(local0, &(((struct sockaddr_un*)largs[1])->sun_path), largs[2])) return -EFAULT;
+			local0[largs[2]]=0;
+//			printk("redirecting process %s %lu %lX %lu socket %s ",current->comm, largs[0], largs[1], largs[2], local0);
+			if(local0[0] && dredirect0(local0) && (len2=strlen(local0))<sizeof(local1.sun_path)) {
+				int result;
+				largs[1]=(unsigned long)(&local1);
+				local1.sun_family=sa.sa_family;
+				largs[2]=len2+sizeof(sa.sa_family);
+				strncpy(local1.sun_path, local0, sizeof(local1.sun_path));
+	                	BEGIN_KMEM
+					result=orig_sys_socketcall(call, largs);
+				END_KMEM
+//				printk("to %s %lu -> return %i\n", local0, largs[2], result);
+				return result;
+			}
+//			printk("\n");
+		}
+	}
+	return orig_sys_socketcall(call, args);
+}
+#endif
+
