@@ -96,7 +96,7 @@ int translucent_create_whiteout(char *file) {
 	int (*orig_sys_fchmod)(int,mode_t)=sys_call_table[__NR_fchmod];
 	int result;
 	BEGIN_KMEM
-		result=orig_sys_open(file,O_CREAT|O_WRONLY|O_TRUNC, 0);
+		result=orig_sys_open(file, O_CREAT|O_EXCL|O_WRONLY|O_TRUNC, 0);
 //		printk("translucent whiteout %s result %i\n", file, result);
 	END_KMEM;
 	if(result<0) return result;
@@ -106,7 +106,7 @@ int translucent_create_whiteout(char *file) {
 }
 
 int translucent_copy(struct nameidata *nd, struct nameidata *nnew, int lookup_flags) {
-	char *p,buf[REDIR_BUFSIZE+1];
+	char *p, *buf;
 	ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[__NR_write];	
 	ssize_t (*sys_read)(int fd, void *buf, size_t count)=sys_call_table[__NR_read];
 	int (*sys_close)(int fd)=sys_call_table[__NR_close];
@@ -116,6 +116,7 @@ int translucent_copy(struct nameidata *nd, struct nameidata *nnew, int lookup_fl
 	if(is_special(nd)) return -ENODEV;
 
 	mode &= S_IRWXUGO;
+        buf=malloc(REDIR_BUFSIZE+1);
 	p = d_path(nd->dentry, nd->mnt, buf, REDIR_BUFSIZE);
 
 //	printk(KERN_DEBUG SYSLOGID ": copy-on-write %s %o\n",p,mode);
@@ -123,7 +124,7 @@ int translucent_copy(struct nameidata *nd, struct nameidata *nnew, int lookup_fl
 	BEGIN_KMEM
 		result=orig_sys_open(p,O_RDONLY,0666);
 	END_KMEM
-	if(result<0) return result;
+	if(result<0) goto out_free;
 	inphandle=result;
 
 	p=d_path(nnew->dentry, nnew->mnt, buf, REDIR_BUFSIZE);
@@ -141,14 +142,17 @@ int translucent_copy(struct nameidata *nd, struct nameidata *nnew, int lookup_fl
 	sys_close(outphandle);
 out_close:
 	sys_close(inphandle);
+out_free:
+        free(buf);
 	return result;
 }
 
 int translucent_mkdir(struct nameidata *nd, struct nameidata *n, int mode, struct translucent *t) {
-	char *p,buf[REDIR_BUFSIZE+1];
+	char *p, *buf;
 	int result, umask=current->fs->umask;
 	if ((translucent_flags&no_copyonwrite)) return -1;
 	mode &= 07777;
+        buf=malloc(REDIR_BUFSIZE+1);
 	p = namei_to_path(nd, buf);
 	memmove(buf,p,strlen(p)+1);
 //	printk(KERN_DEBUG SYSLOGID ": mkdir %s %.4o\n",buf,mode);
@@ -162,9 +166,9 @@ int translucent_mkdir(struct nameidata *nd, struct nameidata *n, int mode, struc
 			path_init(buf,nd->flags,n);
 			result=path_walk(buf,n);
 		}
-		return result;
-	}
-	return -1;
+	} else result=-1;
+        free(buf);
+	return result;
 }
 
 static inline int mymkdir2(struct nameidata *nd, struct nameidata *n, struct translucent *t) {
@@ -334,15 +338,20 @@ freeret:
 }
 
 void absolutize(char *name, struct dentry *d, struct vfsmount *m) {
-	char *p,buf[REDIR_BUFSIZE+1];
+	char *p, *buf;
 	int l,l2 = strlen(name);
 	if(*name == '/') return;
+        buf=malloc(REDIR_BUFSIZE+1);
 	p = d_path(d, m, buf, REDIR_BUFSIZE);
 	l = strlen(p);
-	if (l+l2 >= REDIR_BUFSIZE-3) return; //TODO put better return value here?
-	memmove(&name[l+1], name, l2+1);
-	memcpy(name, p, l);
-	name[l] = '/';
+	if (l+l2 < REDIR_BUFSIZE-3) {
+	        memmove(&name[l+1], name, l2+1);
+	        memcpy(name, p, l);
+	        name[l] = '/';
+        } else {
+                printk(SYSLOGID ": buffer too small\n");
+	}
+        free(buf);
 }
 
 int redirect_path_init(char *name, unsigned int flags, 
@@ -458,24 +467,25 @@ int redirect_path_walk(char *name, char **endp,
 			// prevent COW and overlaying of files in topmost dir
 			if(is_subdir(n[j].dentry, t->n[t->layers-1].dentry)) error = -1;
 			else {
-		 mode=n[j].dentry->d_inode->i_mode;
-		 // this does COW
-		 if(is_special(&n[j])) {
-                        if(S_ISDIR(mode) && (lflags&LOOKUP_CREATE)) mymkdir2(&n[j], &n[t->layers-1], t);
-			else if((lflags&LOOKUP_NOSPECIAL)) error = -1; // no mknod on echo > /dev/null
-			else if((lflags&LOOKUP_CREATE) && (S_ISBLK(mode) || S_ISCHR(mode)) && !(translucent_flags&no_copyonwrite)) {
-				// this is inlined quasi "mymknod"
-				char buf[REDIR_BUFSIZE],*p=namei_to_path(&n[t->layers-1],buf);
-				memmove(buf,p,strlen(p)+1);p=buf;
-//				printk(KERN_DEBUG SYSLOGID ": mknod %s %.6o %X\n",p,mode,n[j].dentry->d_inode->i_rdev);
-				BEGIN_KMEM
-					error = orig_sys_mknod(p,mode,n[j].dentry->d_inode->i_rdev);
-				END_KMEM
-			}
-		 } else if((lflags&LOOKUP_CREATE) && !(translucent_flags&no_copyonwrite)) {
-//			char buf[REDIR_BUFSIZE];printk(KERN_DEBUG SYSLOGID ": mycopy %s %.6o\n",namei_to_path(nd,buf),mode);
-			error = translucent_copy(&n[j],&n[t->layers-1],lflags);
-		 }
+		                mode=n[j].dentry->d_inode->i_mode;
+		                // this does COW
+		                if(is_special(&n[j])) {
+                                       if(S_ISDIR(mode) && (lflags&LOOKUP_CREATE)) mymkdir2(&n[j], &n[t->layers-1], t);
+			               else if((lflags&LOOKUP_NOSPECIAL)) error = -1; // no mknod on echo > /dev/null , cow on fifo and socket does not make sense, copying symlinks is unnecessary
+			               else if((lflags&LOOKUP_CREATE) && (S_ISBLK(mode) || S_ISCHR(mode)) && !(translucent_flags&no_copyonwrite)) {
+				               // this is inlined quasi "mymknod"
+				               char *buf=malloc(REDIR_BUFSIZE+1),*p=namei_to_path(&n[t->layers-1],buf);
+				               memmove(buf,p,strlen(p)+1);p=buf;
+                                               //printk(KERN_DEBUG SYSLOGID ": mknod %s %.6o %X\n",p,mode,n[j].dentry->d_inode->i_rdev);
+				               BEGIN_KMEM
+					               error = orig_sys_mknod(p,mode,n[j].dentry->d_inode->i_rdev);
+				               END_KMEM
+                                               free(buf);
+			               }
+		                } else if((lflags&LOOKUP_CREATE) && !(translucent_flags&no_copyonwrite)) {
+                                       //char buf[REDIR_BUFSIZE];printk(KERN_DEBUG SYSLOGID ": mycopy %s %.6o\n",namei_to_path(nd,buf),mode);
+			               error = translucent_copy(&n[j],&n[t->layers-1],lflags);
+		                }
 			}
 			current->fs->umask = umask;
 			if(error) { path_release(&n[t->layers-1]); valid[t->layers-1]=0; }
@@ -515,7 +525,7 @@ int redirect_path_walk(char *name, char **endp,
             }
 	}
 	// return index of uppermost layer with valid entry
-	for(j=i-1; j>=0; --j) if(valid[j]) path_release(&n[j]); //valid[j]=0; }
+	for(j=i-1; j>=0; --j) if(valid[j]) { path_release(&n[j]); valid[j]=0; }
 	if (endp) *endp=(slash?lastnp:NULL);
 	if(!something_redirected && i>=0) {path_release(&n[i]); return (-1);}
 	return (i);

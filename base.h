@@ -47,7 +47,7 @@
 #define LOOKUP_TRANSLUCENCY_MASK 0x07ffffff
 
 // 2000 here is too much, since kernel stack is small and mymkdir does one recursion
-#define REDIR_BUFSIZE 1023
+#define REDIR_BUFSIZE 511
 #define dflags 0
 #define ANYUID -1
 #define SYSLOGID "translucency"
