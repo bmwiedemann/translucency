@@ -20,8 +20,8 @@ int translucent_flags = 0;
 int translucent_cnt   = 0;
 
 inline int match_uids(void) {
-	uid_t (*geteuid)(void)=sys_call_table[SYS_geteuid];
-	gid_t (*getegid)(void)=sys_call_table[SYS_getegid];
+	uid_t (*geteuid)(void)=sys_call_table[__NR_geteuid];
+	gid_t (*getegid)(void)=sys_call_table[__NR_getegid];
 	return ((translucent_uid == ANYUID || translucent_uid == geteuid()) && 
 	        (translucent_gid == ANYUID || translucent_gid == getegid()));
 }
@@ -52,9 +52,9 @@ inline int is_special(struct nameidata *n) {
 
 int mycopy(struct nameidata *nd, struct nameidata *nnew) {
 	char *p,buf[REDIR_BUFSIZE+1];
-	ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[SYS_write];	
-	ssize_t (*sys_read)(int fd, void *buf, size_t count)=sys_call_table[SYS_read];
-	int (*sys_close)(int fd)=sys_call_table[SYS_close];
+	ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[__NR_write];	
+	ssize_t (*sys_read)(int fd, void *buf, size_t count)=sys_call_table[__NR_read];
+	int (*sys_close)(int fd)=sys_call_table[__NR_close];
 	int result,inphandle,outphandle,mode=nd->dentry->d_inode->i_mode;
 
 // exclude device/pipe/socket/dir and proc entries from COW

@@ -15,6 +15,7 @@
 #include <asm/uaccess.h>
 #include <asm/string.h>
 #include <asm/segment.h>
+#include <asm/unistd.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -25,7 +26,6 @@
 #include <linux/unistd.h>
 #include <linux/sysctl.h>
 #include <linux/utime.h>
-#include <sys/syscall.h>
 #include <linux/ctype.h>
 
 #ifndef _BASE_H_INCLUDED_

@@ -10,33 +10,3 @@ In file included from base.h:9,
                  from base.c:1:
 /usr/src/linux/include/linux/module.h:261: linux/version.h: No such file 
 or directory
-
-
-
-
-
-if you get error like those
-
-
-gcc -c -O2 -Werror -Wall -Wstrict-prototypes -fomit-frame-pointer -pipe
--fno-strength-reduce -nostdinc -I/usr/src/linux/include -I. -I/usr/include
-extension.c
-extension.c: In function `init_module':
-extension.c:174: `SYS_stat64' undeclared (first use in this function)
-extension.c:174: (Each undeclared identifier is reported only once
-extension.c:174: for each function it appears in.)
-extension.c:176: `SYS_lstat64' undeclared (first use in this function)
-extension.c: In function `cleanup_module':
-extension.c:197: `SYS_stat64' undeclared (first use in this function)
-extension.c:199: `SYS_lstat64' undeclared (first use in this function)
-make: *** [extension.o] Error 1
-
-
-you have to add the following to your outdated /usr/include/syscall-list.h
-or to /usr/include/bits/syscall.h
-#define SYS_stat64 __NR_stat64
-#define SYS_lstat64 __NR_lstat64
-#define SYS_getdents64 __NR_getdents64
-#define SYS_truncate64 __NR_truncate64
-#define SYS_lchown32 __NR_lchown32
-#define SYS_chown32 __NR_chown32

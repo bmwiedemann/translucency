@@ -54,7 +54,7 @@ int a(unsigned int fd, struct c *dirp, unsigned int count)\
          if (i == REDIRS) return 0;\
 	p = d_path(f->f_dentry, f->f_vfsmnt, buf, REDIR_BUFSIZE); memmove(buf,p,strlen(p)+1);\
 	if (redirect(&redirs[i], buf)==2) {\
-		int (*orig_sys_close)(int)=sys_call_table[SYS_close];\
+		int (*orig_sys_close)(int)=sys_call_table[__NR_close];\
 		BEGIN_KMEM\
 			result = orig_sys_open(buf, O_RDONLY, 0644);\
 		END_KMEM\
@@ -75,14 +75,14 @@ int redirecting_execve_test(char **filename) {
 	char local0[REDIR_BUFSIZE];
 	if(strncpy_from_user(local0, *filename, REDIR_BUFSIZE)<0) return -EFAULT;
 	if(redirect0(local0)) {
-		int (*access)(const char *pathname, int mode)=sys_call_table[SYS_access];
+		int (*access)(const char *pathname, int mode)=sys_call_table[__NR_access];
 		int result;
 //		printk("execve-redir: %s\n",local0);
 		BEGIN_KMEM
 			result=access(local0,1);
 		END_KMEM
 		if(result==0) {
-			char * (*brk)(void *)=sys_call_table[SYS_brk];
+			char * (*brk)(void *)=sys_call_table[__NR_brk];
 			char *endaddr=brk(0),*newendaddr=endaddr+strlen(local0)+1;
 			if(brk(newendaddr)<newendaddr) return 0;
 			*filename=endaddr;

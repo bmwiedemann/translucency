@@ -39,7 +39,7 @@ void init_redir_calltable(void)
 {
 ";
 foreach(@funcnames) {
-	print SOURCE "\tredir(SYS_$_, orig_sys_$_, redirecting_sys_$_);\n";
+	print SOURCE "\tredir(__NR_$_, orig_sys_$_, redirecting_sys_$_);\n";
 }
 print SOURCE "}
 
@@ -51,7 +51,7 @@ void restore_redir_calltable(void)
 {
 ";
 foreach(@funcnames) {
-	print SOURCE "\tunredir(SYS_$_, orig_sys_$_, redirecting_sys_$_);\n";
+	print SOURCE "\tunredir(__NR_$_, orig_sys_$_, redirecting_sys_$_);\n";
 }
 print SOURCE "}\n\n";
 
