@@ -102,7 +102,10 @@ int mymkdir(struct nameidata *nd, struct nameidata *n, int mode, struct transluc
 			result=orig_sys_mkdir(buf,mode);
 		END_KMEM
 		current->fs->umask = umask;
-		path_init(buf,nd->flags,n);path_walk(buf,n); //re-init nd
+		if(result==0) { //re-init n
+			path_init(buf,nd->flags,n);
+			result=path_walk(buf,n);
+		}
 		return result;
 	}
 	return -1;
@@ -286,8 +289,8 @@ int redirect_path_walk(char *name, char **endp,
 */
 int redirect_path(char *fname, struct translucent *t, int rflags) 
 {
-	char buf[REDIR_BUFSIZE+1],*p,*p2;
-	int i,l,error=1,result=0,top=-1;
+	char *p,*p2;
+	int i,error=1,result=0,top=-1;
 	struct nameidata n[MAX_LAYERS];
 	if ((translucent_flags & no_translucency) || !match_uids()) return 0;
 	if (t == NULL) {
@@ -305,14 +308,11 @@ int redirect_path(char *fname, struct translucent *t, int rflags)
 	}
 	error=top<0;
 	if (error) goto out_release;
-	p = d_path(n[top].dentry, n[top].mnt, buf, REDIR_BUFSIZE);
-	l = strlen(p);
-	//strncat(p,p2,REDIR_BUFSIZE-l+(buf-p));
-//	if(is_subdir(n[top].dentry,t->n[1].dentry)||is_subdir(n[top].dentry,t->n[0].dentry))printk(KERN_INFO "o: %i %i %s - %s\n",error,l,p,p2);
-	if (l >= REDIR_BUFSIZE-2) goto out_release;
-	memcpy(fname,p,l+1);
+	p = d_path(n[top].dentry, n[top].mnt, fname, REDIR_BUFSIZE);
+	memmove(fname,p,strlen(p)+1);
 	result=1;
 	for(i=1; i<t->layers; ++i) if(is_subdir(n[top].dentry, t->n[i].dentry)) result=2;
+//	if(result==2) printk(KERN_DEBUG "o: %i %i %s - %s\n",error,l,p,p2);
 out_release:
 	if (!error) path_release(&n[top]);
 	return result;
