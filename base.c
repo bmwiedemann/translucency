@@ -268,7 +268,7 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
                                         p_CurList=(linked_list_t**)&(p_Cur->next);
                                 }
                                 if(!b_Found && !b_Whiteout){
-                                    p_Data=vmalloc(i_Len);
+                                    p_Data=malloc(i_Len);
                                     memcpy(p_Data, cur, i_Len);
                                     linked_list_insert(&(hashtable[i_Hash]), p_Data);
                                   }
@@ -301,7 +301,7 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
                 BEGIN_KMEM
                         sys_write(outfd, cur, i_Len);
                 END_KMEM
-                vfree(cur);
+                free(cur);
             }
             linked_list_finish(&hashtable[i]);
         }
@@ -473,7 +473,7 @@ int redirect_path_walk(char *name, char **endp,
                 i=any_valid(i,valid);
         }
 	// if topmost entry is a directory merge dirs
-	if(i>0 && (lflags&LOOKUP_NODIR)) {
+	if(i>0 && (lflags&LOOKUP_OPEN) && !(t->flags&no_getdents)) {
                 for(j=i-1; j>=0; --j) if(valid[j] && have_inode(&n[j])) {
                         if(S_ISDIR(n[j].dentry->d_inode->i_mode)) {
 				for(i=0; i<MAX_LAYERS; ++i)

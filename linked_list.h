@@ -7,8 +7,8 @@
 
 #ifdef __KERNEL__
   #include <linux/vmalloc.h>
-  #define malloc vmalloc
-  #define free vfree
+  #define malloc(x) kmalloc(x, GFP_KERNEL)
+  #define free kfree
 #endif
 
 typedef struct

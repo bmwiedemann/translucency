@@ -119,7 +119,7 @@ int redirecting_sys_execve(char *filename, char *const argv [], char *const envp
 int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 {
 	char local0[REDIR_BUFSIZE];
-	int extraflags=LOOKUP_NODIR, redirflags=oflags, rresult;
+	int extraflags=LOOKUP_OPEN|LOOKUP_NOSPECIAL, redirflags=oflags, rresult;
 	if((oflags&O_CREAT) || (oflags&O_WRONLY) || (oflags&O_RDWR)|| (oflags&O_APPEND)) {
 		extraflags|=LOOKUP_CREATE|LOOKUP_MKDIR;
 		if(oflags&O_TRUNC) extraflags|=LOOKUP_TRUNCATE;

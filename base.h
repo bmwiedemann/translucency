@@ -39,7 +39,7 @@
 
 #define LOOKUP_MKDIR	0x80000000
 #define LOOKUP_CREATE	0x40000000
-#define LOOKUP_NODIR	0x20000000
+#define LOOKUP_OPEN	0x20000000
 #define LOOKUP_NOSPECIAL	0x20000000
 #define LOOKUP_TRUNCATE 0x10000000
 #define LOOKUP_CREATES	0x08000000
@@ -51,7 +51,7 @@
 #define ANYUID -1
 #define SYSLOGID "translucency"
 #define REDIRS 8
-#define MAX_LAYERS 2
+#define MAX_LAYERS 8
 
 struct translucent {
 #define valid_translucency  (0x77abc713)
