@@ -70,7 +70,8 @@ foreach(@lines) {
 	my $creation=0; while(s/^://g) {$creation++;}
 	my $headonly=0; while(s/^-//g) {$headonly++;}
 	my $redirtype=0; while(s/^\+//g) {$redirtype++;}
-	my $redirflags=("0","LOOKUP_MKDIR","LOOKUP_MKDIR|LOOKUP_CREATE")[$redirtype];
+	my @redirflags=("0","LOOKUP_MKDIR","LOOKUP_MKDIR|LOOKUP_CREATE");
+	my $redirflags=$redirflags[$redirtype];
 	unless(/$funcre/) {next}
 	if($headonly>1) {next}
 	my $rettype=$1;
@@ -151,7 +152,7 @@ foreach(@lines) {
 # individual patches
 	if($funcname eq "access") {$redirflags.="|(mode==2/*W_OK*/?LOOKUP_MKDIR|LOOKUP_CREATE:0)"}
 	if($funcname eq "mkdir") {$inputcopy[0].=" rresult=strlen(local0)-1;if(local0[rresult]=='/'){local0[rresult]=0;}";}
-        if($funcname eq "link") {$redirflags="0"}
+        if($funcname eq "link") {$redirflags=$redirflags[2]}
         if($funcname eq "rename") {$redirflags=~s/\|LOOKUP_CREATES//}
         if($funcname eq "unlink") {$redirflags.="|LOOKUP_TRUNCATE";}
 
