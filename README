@@ -1,0 +1,37 @@
+Copyright (C) 2001-2002 Bernhard Wiedemann (Bernhard.Wiedemann@Berlin.de)
+translucency is free software; you can redistribute it and/or modify under 
+the terms of the GNU GPL version 2, or (at your option) any later version. 
+ translucency is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ (use it at your own risk and joy!)
+see file COPYING for more details
+
+usage:
+insmod translucency.o from=/given/dir to=/other/dir
+
+this module will install tweaked syscall handlers that redirect
+each access for files within a given directory to another one while 
+failed reads (nonexistent overlay files) will cause fallback 
+to the original files thus virtually (logically) merging both directories
+(possibly being on different medii with different filesystems each)
+
+
+alternative names for the thing achieved earlier (mostly at filesystem level):
+inheriting (ifs), stacking, translucency (tfs), loopback (lofs), overlay (ovlfs)
+some of those actually have (by design) more power than my simple
+syscall-redirecting module aproach.
+There is even a block-level translucency in the md (software RAID) package
+but that will most certainly fail for ISO9660 and other read-only filesystems.
+
+currently translucency is relatively robust within usual patterns 
+while !from_is_subdir and !to_is_subdir
+There are certainly serious buffer overflow conditions not caught
+but this stuff is mainly aimed at productivity (allowing write on CD-ROM)
+yet not on security. To be sure mount ro things that should not be changed
+or chattr -i that_file
+
+for information on params see base.h (from, to, gid, uid, flags)
+
+latest version should be available at
+http://www.informatik.hu-berlin.de/~wiedeman/development/translucency.tgz

@@ -1,0 +1,15 @@
+this module may be used to compile a kernel from a source-dir without
+write permission on that directory. see make ktest for details
+
+make menuconfig 
+	removes and creates include/asm, compiles scripts/lxdialog/lxdialog
+	and creates include/version.h, include/linux/autoconf.h
+make dep
+	compiles scripts/mkdep which creates .depend files anywhere and 
+	one .hdepend file
+
+make bzImage modules
+	compiles and runs scripts/split-include which
+	creates many headers within include/config
+	touches other header files
+	compiles all sources
