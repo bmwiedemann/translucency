@@ -70,62 +70,6 @@ int fname(unsigned int fd, struct dtype *dirp, unsigned int count)\
 redirecting_sys_getdentsxx(redirecting_sys_getdents,orig_sys_getdents,dirent)
 redirecting_sys_getdentsxx(redirecting_sys_getdents64,orig_sys_getdents64,dirent64)
 
-// returning 0 means executing *filename is OK... otherwise it is the final exec return value
-int redirecting_execve_test(char **filename) {
-	char local0[REDIR_BUFSIZE];
-	int (*access)(const char *pathname, int mode)=sys_call_table[__NR_access];
-	char * (*brk)(void *)=sys_call_table[__NR_brk];
-	char *ret=0, *endaddr, *newendaddr;
-	int result, rresult;
-	if(strncpy_from_user(local0, *filename, REDIR_BUFSIZE)<0) return -EFAULT;
-	if((rresult=redirect0(local0))<=0) return rresult;
-//	printk(KERN_INFO SYSLOGID ": execve %s %s\n",current->comm, local0);
-	if(strcmp(current->comm, "keventd")) {	// keventd execs "/sbin/hotplug" -> brk oopses
-		endaddr=brk(0);
-		newendaddr=endaddr+strlen(local0)+1;
-		BEGIN_KMEM
-			result=access(local0,1);
-		END_KMEM
-		if(result) return 0;
-		if(!brk || IS_ERR(brk) || (ret=brk(newendaddr))<newendaddr || IS_ERR(ret))
-			return 0;
-		*filename=endaddr;
-	}
-// this line alone happened to work on 95% of all execs, but the previous ones make it more reliable
-	if(copy_to_user(*filename,local0,strlen(local0)+1)) return -EFAULT;
-	return 0;
-}
-
-#if defined(__i386__)
-#define fname "redirecting_sys_execve"
-__asm__(
-"\n.globl " SYMBOL_NAME(fname) "\n "
-__ALIGN_STR"\n"
-" .type " fname ",@function\n"
-SYMBOL_NAME(fname) ":\n"
-" pushl %ebp\n movl %esp,%ebp\n"
-" leal 8(%ebp),%eax\n pushl %eax\n"
-" call redirecting_execve_test\n"
-" movl %ebp,%esp\n popl %ebp\n"
-" testl %eax,%eax\n jz .Lexecredirorig\n ret\n"
-".Lexecredirorig:\n"
-" jmpl *orig_sys_execve\n"
-".L" fname "_end:\n"
-" .size " fname ",.L" fname "_end-" fname "\n");
-#undef fname
-
-#else
-/* did some strange addl $-12,%esp
-   but it is important to leave stack untouched
-   that asm should work on all i386 compatible platforms
-int redirecting_sys_execve(char *filename, char *const argv [], char *const envp[])
-{
-	int result;
-	if((result=redirecting_execve_test(&filename))) return result;
-	goto *orig_sys_execve;
-}
-*/
-#endif
 
 #if defined(__NR_open)
 int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
