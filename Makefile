@@ -1,32 +1,34 @@
 KERNELDIR=/usr/src/linux
 KERNELDIR_UM=/usr/src/linux-2.4.18-um27
 CFLAGS=-O2 -Werror -Wall -Wstrict-prototypes -fomit-frame-pointer -pipe -fno-strength-reduce
-F=/tmp/fromdir/
-T=/tmp/todir/
+F=/tmp/fromdir
+T=/tmp/todir
 M=translucency
 D=$M
 O=base.o extension.o staticext.o
-E=ext
+E=extension
 
 KERNELINCLUDE = $(shell if [ "${ARCH}" = "um" ] ; \
 	then echo -I$(KERNELDIR_UM)/include -I$(KERNELDIR_UM)/arch/um/include ; \
 	else echo -I$(KERNELDIR)/include ; fi)
 
-CFLAGS += -D__KERNEL__ -DMODULE $(KERNELINCLUDE)
-include $(KERNELDIR)/.config
+CFLAGS += -D__KERNEL__ -DMODULE
+ifndef ARCH
+#include $(KERNELDIR)/.config
 ifdef CONFIG_SMP
 CFLAGS += -D__SMP__ -DSMP
 endif
+endif
 
-CFLAGS += -nostdinc $(INCLUDE) -I. -I/usr/include
+CFLAGS += -nostdinc $(KERNELINCLUDE) $(INCLUDE) -I. -I/usr/include
 
 all: $M.o
 $M.o: $O
 	ld -i $O -o $M.o
 
-$E.c: redirect.txt makeext.pl
-	perl makeext.pl $E <redirect.txt
-	patch -p0 $E.c < extdiff.txt
+$E.c $E.h: redirect.txt makeext.pl
+	perl makeext.pl $E redirect.txt
+	if [ -e extension.diff ] ; then patch -p0 $E.c < extension.diff ; fi
 
 ok:
 	cp -a $E.c extension.c
@@ -34,17 +36,23 @@ ok:
 
 extdiff:
 	cp -a extension.c $En.c
-	perl makeext.pl $E <redirect.txt
-	-diff -u $E.c $En.c >extdiff.txt
+	perl makeext.pl $E redirect.txt
+	-diff -u $E.c $En.c > extension.diff
 	mv $En.c $E.c
 
-%.o: %.c base.h compatibility.h
+%.o: %.c base.h compatibility.h extension.h
 	gcc -c $(CFLAGS) $<
 %.s: %.c Makefile
 	gcc -S $(CFLAGS) $<
-
+install: all
+	gzip -c9 $M.8 > $M.8.gz
+	install -p -m 644 $M.8.gz /usr/share/man/man8/
+	install -p -m 644 $M.o /lib/modules/`uname -r`/kernel/fs/
+	install -p -m 755 mount.translucency /sbin/
+uninstall:
+	rm -f /usr/share/man/man8/$M.8.gz /lib/modules/`uname -r`/kernel/fs/$M.o /sbin/mount.translucency
 tar: tgz
-tgz: clean
+tgz: distclean extension.c
 	chmod a+rX . -R
 	chmod go-w . -R
 	tar czf ../$D.tar.gz -C .. --owner=0 --group=0 $D/
@@ -80,8 +88,8 @@ $T/have_testfiles:
 	-ln -s "static" $F/link
 	-ln -s "../linktest" $F/link2
 	-ln -s "../linktest" $T/link2
-	-ln -s "$Tsub3/test" $F/link3
-	-ln -s "$Fsub/static" $T/link4
+	-ln -s "$T/sub3/test" $F/link3
+	-ln -s "$F/sub/static" $T/link4
 	-ln -s "$F/sub" $T/link5
 	-ln -s "$F/sub2" $T/link6
 	-ln -s "$F/sub3" $F/link7
@@ -91,12 +99,10 @@ $T/have_testfiles:
 
 test: $M.o testfiles
 	sync
-	insmod -f $M.o from=$F to=$T
-	-ls -RF $T
-	-ls -RF $F
-	-ls -F $F/link5/
-	-ls -F $F/link6/
-	-ls -F $F/link8/
+	insmod $M.o 
+	echo "$F -> $T" > /proc/sys/translucency/0
+	-find $T $F
+	-find $F/link5/ $F/link8/	#$F/link6
 	-sleep 1
 	-cat $F/test
 	-cat $F/static
@@ -122,35 +128,39 @@ test: $M.o testfiles
 	-$F/sub2/exectest
 	-rm $F/sub2/exectest
 	-$F/sub2/exectest
-	echo 2 > /proc/sys/translucency/flags
+	-echo 2 > /proc/sys/translucency/flags
 	-echo echo appended >>$F/sub2/exectest
 	-$F/sub2/exectest
-	echo 8 > /proc/sys/translucency/flags
-	-ls -RF $F
-	echo 4 > /proc/sys/translucency/flags
-	-ls -RF $F
-	-ls -RF $T
+	-echo 4 > /proc/sys/translucency/flags
+	-find $F
+	-echo 1 > /proc/sys/translucency/flags
+	-find $F $T
 	-cat $F/sub2/test
 	-$F/sub2/exectest
-	echo 0 > /proc/sys/translucency/flags
+	-echo 0 > /proc/sys/translucency/flags
 	-$F/sub2/exectest
 	-rm $F/sub2/exectest
+	-echo "" > /proc/sys/translucency/0
 	rmmod $M
 
 ktest: $M.o
 	#-rm -rf $T
 	mkdir -p $T/include
 	cp -a $(KERNELDIR)/include/asm-i386 $T/include/
+	-rm -f $(KERNELDIR)/include/asm		#have a clean kernel
 	chown -R nobody. $T
 	sync
-	insmod -f $M.o uid=65534 from=$(KERNELDIR) to=$T
+	insmod $M.o 
+	echo 65534 > /proc/sys/translucency/uid
+	echo "$(KERNELDIR)/ -> $T" > /proc/sys/translucency/0
 	-su nobody -c "cd $(KERNELDIR); make menuconfig"
-	echo 8 >/proc/sys/translucency/flags	#turn off merged dir listings
+	echo 4 >/proc/sys/translucency/flags	#turn off merged dir listings
 	-su nobody -c "cd $(KERNELDIR); make dep"
 	echo 0 >/proc/sys/translucency/flags
 	rm $T/include/asm; ln -s asm-i386 $T/include/asm
 	-su nobody -c "cd $(KERNELDIR); make bzImage modules"
-	#rmmod $M
+	echo "" > /proc/sys/translucency/0
+	rmmod $M
 
 testrun:
 	-rm -rf $F $T /tmp/linktest
@@ -158,5 +168,6 @@ testrun:
 	make test | diff -u testrun2.txt -
 clean:
 	-rm -f *.o *.rej *.[ch].orig $E.[ch]
+distclean: mrproper
 mrproper: clean
-	-rm -rf $F $T /tmp/linktest *.s
+	-rm -rf /tmp/fromdir /tmp/todir /tmp/linktest *.s *~ .\#*

@@ -59,7 +59,7 @@ int mycopy(struct nameidata *nd, struct nameidata *nnew) {
 // exclude device/pipe/socket/dir and proc entries from COW
 	if(is_special(nd)) return -ENODEV;
 
-	mode &= 01777;
+	mode &= S_IRWXUGO;
 	p = d_path(nd->dentry, nd->mnt, buf, REDIR_BUFSIZE);
 
 //	printk(KERN_INFO "redir-copy-on-write: %s %o\n",p,mode);
@@ -93,7 +93,7 @@ int mymkdir(struct nameidata *nd, struct nameidata *n, int mode, struct transluc
 	mode &= 07777;
 	p = namei_to_path(nd, buf);
 	memmove(buf,p,strlen(p)+1);
-//	printk(KERN_INFO "redir-mkdir: %s %o\n",buf,mode);
+//	printk(KERN_DEBUG SYSLOGID ": mkdir %s %.4o\n",buf,mode);
 	if(redirect(t,buf)) {
 		BEGIN_KMEM
 			result=orig_sys_mkdir(buf,mode);
@@ -186,16 +186,6 @@ int redirect_path_walk(char *name, char **endp,
 			if (error2 && slash && valid1 && (lflags & LOOKUP_MKDIR) && 
 			    mymkdir2(nori,nd,t)==0) 
 				error2 = 0;
-			if (!error2 && !have_inode(nd)) {
-//if(valid1 && slash && (lflags&LOOKUP_MKDIR) && mymkdir2(nori,nd)==0);else 
-				if (valid1 && !slash && (lflags & LOOKUP_CREATE) && !(translucent_flags&no_copyonwrite)) {
-					if (mycopy(nori,nd) == -ENODEV) { 
-						path_release(nd);
-						error2 = -1;
-					}
-				}
-			} //TODO: verify
-
 			if (error2) valid2 = 0;
 		}
 		if (slash) { *slash = savedchar; }
@@ -224,12 +214,25 @@ int redirect_path_walk(char *name, char **endp,
 //		{ error2=mymkdir(nd2,nd1->dentry->d_inode->i_mode); }
 		lastnp=np;
 		np=slash;
-	}
-	if(valid1 && (!valid2 || !have_inode(nd))) {
-		if((lflags&LOOKUP_NOSPECIAL) && is_special(nori)) {
-			path_release(nori); valid1=0;
-			if(valid2) { path_release(nd); valid2=0; }
-		} // else TODO: better place for copyonwrite here?
+	}	// end of main redirect/walking loop
+
+	if(!slash && valid1 && have_inode(nori) && valid2 && !have_inode(nd)) {
+		int mode=nori->dentry->d_inode->i_mode;
+		if(is_special(nori)) {
+			if((lflags&LOOKUP_NOSPECIAL)) {
+				path_release(nd); valid2=0;
+			} else if((lflags&LOOKUP_CREATE) && (S_ISBLK(mode) || S_ISCHR(mode)) && !(translucent_flags&no_copyonwrite)) {
+				// this is inlined quasi "mymknod"
+				char buf[REDIR_BUFSIZE],*p=namei_to_path(nd,buf);
+//				printk(KERN_DEBUG SYSLOGID ": mknod %s %.6o %X\n",p,mode,nori->dentry->d_inode->i_rdev);
+				BEGIN_KMEM
+					orig_sys_mknod(p,mode,nori->dentry->d_inode->i_rdev);
+				END_KMEM
+			}
+		} else if((lflags&LOOKUP_CREATE) && !(translucent_flags&no_copyonwrite)) {
+//			char buf[REDIR_BUFSIZE];printk(KERN_DEBUG SYSLOGID ": mycopy %s %.6o\n",namei_to_path(nd,buf),mode);
+			mycopy(nori,nd);
+		}
 	}
 	if (!valid2 && valid1) {*nd=*nori;valid1=0;}
 	if (valid1) {
