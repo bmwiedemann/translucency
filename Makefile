@@ -20,7 +20,7 @@ F=/tmp/fromdir
 T=/tmp/todir
 M=translucency
 D=$M
-O=base.o extension.o staticext.o
+O=extension.o staticext.o base.o
 E=extension
 
 KERNELVERSION = $(shell awk -F\" '/UTS_RELEASE/{print $$2}' ${KERNELDIR}/include/linux/version.h )
@@ -42,7 +42,7 @@ all: $M.o
 $M.o: $O
 	ld -i $O -o $M.o
 
-$E.c $E.h: redirect.txt makeext.pl
+$E.c: redirect.txt makeext.pl
 	perl makeext.pl $E redirect.txt
 	if [ -e extension.diff ] ; then patch -p0 $E.c < extension.diff ; fi
 

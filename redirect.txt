@@ -5,9 +5,12 @@
 # ++ function body that does above and copy-on-the-fly
 # -  function is auto-generated with empty body to be patched in
 # -- no function body
+# :  syscall creates file
+# :: syscall removes file
+# ::: both above
 
---int open(const char *pathname, int oflags, mode_t mode);
-+int creat(const char *pathname, mode_t mode);
+:--int open(const char *pathname, int oflags, mode_t mode);
+:--+int creat(const char *pathname, mode_t mode);
 ++int truncate(const char *path, off_t length);
 ++int truncate64(const char *path, loff_t length);
 
@@ -18,8 +21,8 @@ int lstat64(const char *file_name, struct stat64 *buf);
 int access(const char *pathname, int mode);
 int readlink(const char *path, char *buf, size_t bufsiz);
 
-++int rename(const char *oldpath, const char *newpath);
-int unlink(const char *pathname);
+:++int rename(const char *oldpath, const char *newpath);
+::+int unlink(const char *pathname);
 --int chdir(const char *path);
 +int mkdir(const char *pathname, mode_t mode);
 int rmdir(const char *pathname);
@@ -28,9 +31,9 @@ int rmdir(const char *pathname);
 ++int lchown(const char *path, uid_t owner, gid_t group);
 ++int chown32(const char *path, uid_t owner, gid_t group);
 ++int lchown32(const char *path, uid_t owner, gid_t group);
-+int mknod(const char *pathname, mode_t mode, dev_t dev);
-+int link(const char *oldpath, const char *newpath);
---+int symlink(const char *oldpath, const char *newpath);
+:+int mknod(const char *pathname, mode_t mode, dev_t dev);
+:+int link(const char *oldpath, const char *newpath);
+:--+int symlink(const char *oldpath, const char *newpath);
 ++int utime(const char *filename, const struct utimbuf *buf);
 ++int utimes(const char *filename, const struct timeval *buf);
 #int statfs(const char *path, struct statfs *buf);
@@ -52,7 +55,7 @@ int swapoff(const char *path);
 --int execve(const char *filename, char *const argv [], char *const envp[]);
 
 # for connect/bind - possible: accept, getpeername, getsockname, sendto
---int socketcall(int call, unsigned long *args);
+:--int socketcall(int call, unsigned long *args);
 
 #int chroot(const char *path);	//not really supported
 #int mount(const char *specialfile, const char *dir, const char *filesystemtype, unsigned long rwflag, const void *data);

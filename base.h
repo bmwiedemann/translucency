@@ -78,6 +78,7 @@ extern int translucent_flags;
 #define no_copyonwrite      (1<<1)
 #define no_getdents         (1<<2)
 #define do_downcase         (1<<3)
+#define do_whiteout         (1<<4)
 
 extern struct ctl_table_header *redirection_table_header;
 extern struct ctl_table redirection_table[];
@@ -90,6 +91,7 @@ int  have_inode          (struct nameidata *);
 int  is_special          (struct nameidata *);
 int  is_subdir           (struct dentry *dir, struct dentry *parent);
 void absolutize          (char *name, struct dentry *d, struct vfsmount *m);
+int  translucent_create_whiteout(char *file);
 int  redirect_path_walk  (char *name, char **endp, struct nameidata *n, struct translucent *t);
 int  redirect_path       (char *fname, struct translucent *t, int flags);
 
@@ -101,6 +103,7 @@ static inline int wredirectt(struct translucent *t, char *a) { return redirect_p
 static inline int dredirectt(struct translucent *t, char *a) { return redirect_path(a,t,dflags|LOOKUP_MKDIR); }
 static inline int  redirectt(struct translucent *t, char *a) { return redirect_path(a,t,dflags); }
 
+static inline int tredirect0(char *a) { return redirect_path(a,0,dflags|LOOKUP_MKDIR|LOOKUP_CREATE|LOOKUP_TRUNCATE); }
 static inline int wredirect0(char *a) { return redirect_path(a,0,dflags|LOOKUP_MKDIR|LOOKUP_CREATE); }
 static inline int dredirect0(char *a) { return redirect_path(a,0,dflags|LOOKUP_MKDIR); }
 static inline int  redirect0(char *a) { return redirect_path(a,0,dflags); }

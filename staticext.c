@@ -137,17 +137,26 @@ int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 		extraflags|=LOOKUP_CREATE|LOOKUP_MKDIR;
 		if(oflags&O_TRUNC) extraflags|=LOOKUP_TRUNCATE;
 	}
+	if((oflags&O_CREAT)) extraflags|=LOOKUP_CREATES;
 	//TODO: consider O_EXCL|O_CREAT here
 	if(strncpy_from_user(local0, pathname, REDIR_BUFSIZE)<0) return -EFAULT;
 	if((rresult=redirect_path(local0,0, dflags | extraflags))>0) {
 		int result;
 		BEGIN_KMEM
+			if(rresult&4) orig_sys_unlink(local0);
 			result = orig_sys_open(local0, redirflags, mode);
+			if(result<0 && rresult&4) translucent_create_whiteout(local0);
 		END_KMEM
 		if(no_fallback(result)) return result;
 	}
 	if(rresult<0) return rresult;
 	return orig_sys_open(pathname, oflags, mode);
+}
+#endif
+#if defined(__NR_creat)
+int redirecting_sys_creat(const char *pathname, mode_t mode)
+{
+	return redirecting_sys_open(pathname, O_WRONLY|O_CREAT|O_TRUNC, mode);
 }
 #endif
 
@@ -218,9 +227,11 @@ int redirecting_sys_socketcall(int call, unsigned long *args)
 				local1.sun_family=sa.sa_family;
 				largs[2]=len2+sizeof(sa.sa_family);
 				strncpy(local1.sun_path, local0, sizeof(local1.sun_path));
+				if(rresult&4) BEGIN_KMEM orig_sys_unlink(local0); END_KMEM
 	                	BEGIN_KMEM
 					result=orig_sys_socketcall(call, largs);
 				END_KMEM
+				if(result<0 && rresult&4) translucent_create_whiteout(local0);
 //				printk("to %s %lu -> return %i\n", local0, largs[2], result);
 				return result;
 			}

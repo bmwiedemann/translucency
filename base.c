@@ -70,9 +70,23 @@ inline int is_special(struct nameidata *n) {
 		|| n->dentry->d_inode->i_sb->s_magic==PROC_SUPER_MAGIC);
 }
 
-static inline int translucent_is_deleted(struct nameidata *n) {
+static inline int translucent_is_whiteout(struct nameidata *n) {
   return n && have_inode(n) && n->dentry->d_inode->i_size==0 &&
 	((n->dentry->d_inode->i_mode&(S_IALLUGO|S_IFMT))==(S_IFREG|01001));
+}
+
+int translucent_create_whiteout(char *file) {
+	int (*orig_sys_close)(int)=sys_call_table[__NR_close];
+	int (*orig_sys_fchmod)(int,mode_t)=sys_call_table[__NR_fchmod];
+	int result;
+	BEGIN_KMEM
+		result=orig_sys_open(file,O_CREAT|O_WRONLY|O_TRUNC, 0);
+//		printk("translucent whiteout %s result %i\n", file, result);
+	END_KMEM;
+	if(result<0) return result;
+	orig_sys_fchmod(result, 01001);
+	orig_sys_close(result);
+	return 0;
 }
 
 int translucent_copy(struct nameidata *nd, struct nameidata *nnew, int lookup_flags) {
@@ -347,9 +361,10 @@ int redirect_path(char *fname, struct translucent *t, int rflags)
 	result=1;
 	for(i=1; i<t->layers; ++i) if(is_subdir(n[top].dentry, t->n[i].dentry)) result=2;
 //	if(result==2) printk(KERN_DEBUG "o: %i %i %s - %s\n",error,l,p,p2);
-	if(translucent_is_deleted(&n[top]) && top>0 && !(rflags&LOOKUP_CREATES)) {
+	if(translucent_is_whiteout(&n[top]) && top>0) {
+		if(rflags&LOOKUP_CREATES) result|=4;
+		else result=-ENOENT;
 		//printk(KERN_INFO "translucency: deletion of %s detected\n",fname);
-		result=-ENOENT;
 	}
 out_release:
 	if (!error) path_release(&n[top]);
