@@ -13,6 +13,7 @@
 
 /* There are up to REDIRS redirections possible */
 struct translucent redirs[REDIRS];
+char translucent_delimiter[16]=" -> ";	// set to "" for binfmt_misc syntax
 int translucent_uid   = ANYUID;
 int translucent_gid   = ANYUID;
 int translucent_flags = 0;
@@ -307,8 +308,6 @@ static void cleanup_translucent(struct translucent *t)
 		path_release(&t->n[0]);
 		path_release(&t->n[1]);
 		t->valid = 0;
-		memset(t->from, 0, sizeof(t->from));
-		memset(t->to,   0, sizeof(t->to));
 		memset(t->b,    0, sizeof(t->b));
 		MOD_DEC_USE_COUNT; --translucent_cnt;
 	}
@@ -316,31 +315,49 @@ static void cleanup_translucent(struct translucent *t)
 
 static int init_translucent(struct translucent *t) 
 {
-	int error;
-
-	if (sscanf(t->b, "%s -> %s", t->from, t->to) != 2) {
-		if (t->b[0] == 0 || isspace(t->b[0])) {
-			// already cleaned? yes! -- cleanup_translucent(t);
-			printk(KERN_INFO SYSLOGID ": mapping %d removed\n", (int)t->index);
-			return 0;
-		} else {
-			printk(KERN_ERR SYSLOGID ": bad mapping %d `%s'\n", (int)t->index, t->b);
-			return -ENOENT;
+	char buf[REDIR_BUFSIZE], *p=buf,*endp=buf, del=0, delsize=1,
+		delimiter[sizeof(translucent_delimiter)];
+	int error, i,n=0,l=strlen(p)-1;
+	if(p[l]=='\n') p[l]=0;		// strip LF
+	if (t->b[0] == 0) {
+		printk(KERN_INFO SYSLOGID ": mapping %d removed\n", (int)t->index);
+		return 0;
+	}
+	strncpy(buf, t->b, sizeof(buf));
+	strcpy(delimiter, translucent_delimiter);
+	if(!delimiter[0]) del=*(p++);	// for binfmt_misc syntax
+	else delsize=strlen(delimiter);
+	while(endp && *p) {
+		if(delimiter[0]) endp=strstr(p,delimiter);
+		else endp=strchr(p,del);
+		if(endp) {
+			*endp=0;
 		}
+		if(*p) {
+			// initialization of layer n
+			if(n>=MAX_LAYERS) {
+				printk(KERN_ERR SYSLOGID ": error MAX_LAYERS=%i\n",MAX_LAYERS);
+				for(i=0; i<n; ++i) path_release(&t->n[i]);
+				return -EINVAL;
+			}
+			path_init(p, dflags, &t->n[n]);
+			error = path_walk(p, &t->n[n]);
+			if(!have_inode(&t->n[n])) { error=-1; path_release(&t->n[n]); }
+			if (error) {
+				for(i=0; i<n; ++i) path_release(&t->n[i]);
+				printk(KERN_ERR SYSLOGID ": %s not found\n", p);
+				return -ENOENT;
+			}
+			++n;
+		}
+		p=endp+delsize;
 	}
-
-	path_init(t->from, dflags, &t->n[0]);
-	error = path_walk(t->from, &t->n[0]);
-	if (error) return -ENOENT;
-
-	path_init(t->to,   dflags, &t->n[1]);
-	error = path_walk(t->to, &t->n[1]);
-	if (error || !have_inode(&t->n[1])) {
-		path_release(&t->n[0]);
-		return -ENOENT;
+	t->layers=n;
+	printk(KERN_INFO SYSLOGID ": mapping %d established ", t->index);
+	for(i=0; i<t->layers; ++i) {
+		p=namei_to_path(&t->n[i],t->b);
+		printk("%s%s",p,i==t->layers-1?"\n":" -> ");
 	}
-	t->layers=2;
-	printk(KERN_INFO SYSLOGID ": mapping %d established %s -> %s\n", (int)t->index, t->from, t->to);
 	t->valid = valid_translucency;
 	MOD_INC_USE_COUNT; ++translucent_cnt;
 	return 0;
@@ -394,6 +411,7 @@ struct ctl_table redirection_dir_table[REDIRS+CTL_TABLE_STATIC] = {
 	{CTL_TABLE_BASE+2, "gid",   &translucent_gid,   sizeof(translucent_gid),   0644, NULL, &proc_dointvec},
 	{CTL_TABLE_BASE+3, "flags", &translucent_flags, sizeof(translucent_flags), 0644, NULL, &proc_dointvec},
 	{CTL_TABLE_BASE+4, "used",  &translucent_cnt,   sizeof(translucent_cnt),   0444, NULL, &proc_doint_ro},
+	{CTL_TABLE_BASE+5, "delimiter", &translucent_delimiter, sizeof(translucent_flags), 0644, NULL, &proc_dostring},
 };
 struct ctl_table_header *redirection_table_header;
 struct ctl_table redirection_table[] = {

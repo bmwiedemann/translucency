@@ -55,14 +55,12 @@ struct translucent {
 	char flags;
 	int index; /* up to REDIRS possible */
 	int layers;
-	char from[REDIR_BUFSIZE];
-	char to[REDIR_BUFSIZE];
 	struct nameidata n[MAX_LAYERS];
 	char b[REDIR_BUFSIZE];
 };
 
 #define CTL_TABLE_BASE 0x89194729
-#define CTL_TABLE_STATIC 5
+#define CTL_TABLE_STATIC 6
 #define CTL_ENTRY_BASE (CTL_TABLE_BASE+CTL_TABLE_STATIC)
 
 extern void* sys_call_table[];
