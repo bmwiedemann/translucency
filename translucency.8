@@ -36,6 +36,8 @@ change the module's operation with a bitwise combination of the following:
 2 no_copyonwrite: kernel does not try to copy files if needed (i.e. for appending)
 .RS 0
 4 no_getdents: only entries in lower layer are shown in directory listings
+.RS 0
+8 do_downcase: downcase all filenames to avoid inconsistencies on case-insensitive filesystems
 .SH AUTHOR
 Bernhard M. Wiedemann <b.m.w@gmx.net>
 .RS 0
