@@ -47,6 +47,7 @@ extdiff:
 install: all
 	gzip -c9 $M.8 > $M.8.gz
 	install -p -m 644 $M.8.gz /usr/share/man/man8/
+	rm translucency.8.gz
 	install -p -m 644 $M.o /lib/modules/`uname -r`/kernel/fs/
 	install -p -m 755 mount.translucency /sbin/
 uninstall:
@@ -101,7 +102,7 @@ test: $M.o testfiles
 	sync
 	insmod $M.o 
 	echo "$F -> $T" > /proc/sys/translucency/0
-	-find $T $F
+	-find $T $F | sort
 	-find $F/link5/ $F/link8/	#$F/link6
 	-sleep 1
 	-cat $F/test
@@ -132,9 +133,9 @@ test: $M.o testfiles
 	-echo echo appended >>$F/sub2/exectest
 	-$F/sub2/exectest
 	-echo 4 > /proc/sys/translucency/flags
-	-find $F
+	-find $F | sort
 	-echo 1 > /proc/sys/translucency/flags
-	-find $F $T
+	-find $F $T | sort
 	-cat $F/sub2/test
 	-$F/sub2/exectest
 	-echo 0 > /proc/sys/translucency/flags

@@ -1,11 +1,10 @@
 TODO list:
-find strange "device busy" bug (probably missing dput somewhere (in kernel?))
+find "device busy" bug (probably missing dput/release_path somewhere)
 extensive testing, compile kernel
-sort & uniq within getdents (whiteout entry support?)
-exclude fromdir (and other special filesystems) from translucency
+rewrite getdents for layers>=2
+sort & uniq within getdents and whiteout entry support
 allow specification of excluded directories (e.g. mount points) 
 better .. handling 
-allow overlaying of more than one directory
 fs= param (with magic numbers as in "grep SUPER_MAGIC include/linux/*.h")
 
 `grep TODO *`
