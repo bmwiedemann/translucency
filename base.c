@@ -194,7 +194,6 @@ static inline int mymkdir2(struct nameidata *nd, struct nameidata *n, struct tra
 	return translucent_mkdir(nd,n,nd->dentry->d_inode->i_mode,t);
 }
 
-unsigned int i_Random;
 /** calculate hash from key data
   @param unsigned char *key zero terminated input data
   @return int hash value in range [0,HASH_TABLE_SIZE-1]
@@ -208,7 +207,6 @@ static inline int hash_func(unsigned char *key)
                 hash+=*key;
                 ++key;
         }
-        i_Random^=hash;
         hash=(hash^(hash>>HASH_BITS)^(hash>>(HASH_BITS*2)))%HASH_TABLE_SIZE;
 //        printf("%i\n", hash);
         return hash;
@@ -225,6 +223,7 @@ static inline int translucent_getdents(unsigned int fd, struct dirent64 *dirp, u
 
 int translucent_merge_init(int i_Layers, struct nameidata *n)
 {
+	static unsigned int i_Random;
         int (*sys_close)(int)=sys_call_table[__NR_close];
         off_t (*sys_lseek)(int fildes, off_t offset, int whence)=sys_call_table[__NR_lseek];
         ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[__NR_write];
@@ -322,8 +321,7 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
         }
         i_Bytes=0;
         task=current;
-        i_Random=(int)p_VarSpace^(int)task->pidhash_next^(int)task->pidhash_pprev^(int)&i^(int)sys_close^(i_Random<<1);
-        snprintf(s_File, REDIR_BUFSIZE, "/tmp/getdents-%.5i-%.8X", task->pid, i_Random);
+        snprintf(s_File, REDIR_BUFSIZE, "/tmp/getdents-%.5i-%.8X", task->pid, i_Random++);
         ps=p;
         for(i=strlen(s_File); ps && *ps && (unsigned)i<REDIR_BUFSIZE-1; ++i,++ps) {
                 s_File[i]=(*ps=='/')?'-':*ps; // append pathname with / substituted
