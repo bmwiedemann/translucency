@@ -1,11 +1,16 @@
 K=/usr/src/linux
-CFLAGS=-O2 -Werror -Wall -Wstrict-prototypes -fomit-frame-pointer -pipe -fno-strength-reduce -nostdinc -I$K/include -I. -I/usr/include
+UM=/usr/src/linux-2.4.18-um27
+CFLAGS=-O2 -Werror -Wall -Wstrict-prototypes -fomit-frame-pointer -pipe -fno-strength-reduce
 F=/tmp/fromdir/
 T=/tmp/todir/
 M=translucency
-D=$M/
+D=$M
 O=base.o extension.o sysctl.o staticext.o
 E=ext
+
+#KERNELINCLUDE = `if [ "${ARCH}" = "um" ] ; then echo -I${UM}/include -I${UM}/arch/um/include ; else echo -I$K/include ; fi `
+KERNELINCLUDE = $(shell if [ "${ARCH}" = "um" ] ; then echo -I${UM}/include -I${UM}/arch/um/include ; else echo -I$K/include ; fi )
+ALLINCLUDE = -nostdinc $(KERNELINCLUDE) $(INCLUDE) -I. -I/usr/include
 
 all: $M.o
 $M.o: $O
@@ -26,13 +31,13 @@ extdiff:
 	mv $En.c $E.c
 
 %.o: %.c base.h compatibility.h
-	gcc -c $(CFLAGS) $(INCLUDE) $<
+	gcc -c $(CFLAGS) $(ALLINCLUDE) $<
 %.s: %.c Makefile
-	gcc -S $(CFLAGS) $(INCLUDE) $<
+	gcc -S $(CFLAGS) $(ALLINCLUDE) $<
 
+tar: tgz
 tgz: clean
-	(cd .. ; tar c $D* | gzip -9 >$M.tgz)
-#(cd .. ; tar c $DMakefile $D*.pl $D*.txt $D*.[ch] | gzip -9 >$M.tgz)
+	tar czf ../$D.tar.gz -C .. --owner=0 --group=0 $D/
 
 ramdsk: $T/is_ramdsk
 
