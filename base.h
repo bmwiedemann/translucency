@@ -40,7 +40,7 @@
 #define LOOKUP_NOSPECIAL	0x20000000
 #define LOOKUP_TRANSLUCENCY_MASK 0x1fffffff
 
-//4000 here is too much
+// 2000 here is too much, since kernel stack is small and mymkdir does one recursion
 #define REDIR_BUFSIZE 1023
 #define dflags 0
 #define ANYUID -1
@@ -100,3 +100,8 @@ void restore_redir_calltable (void);
 #define redirect0(a)     redirect_path((a),0,dflags)
 
 #define namei_to_path(n,buf) d_path((n)->dentry, (n)->mnt, buf, REDIR_BUFSIZE)
+
+
+#ifndef MODULE_LICENSE
+#define MODULE_LICENSE(name)
+#endif
