@@ -44,6 +44,11 @@ inline int have_inode(struct nameidata *n) {
 	return /*n!=NULL && */ n->dentry!=NULL && n->dentry->d_inode!=NULL;
 }
 
+inline int is_special(struct nameidata *n) {
+	return have_inode(n) && (!S_ISREG(n->dentry->d_inode->i_mode) 
+		|| n->dentry->d_inode->i_sb->s_magic==PROC_SUPER_MAGIC);
+}
+
 int mycopy(struct nameidata *nd, struct nameidata *nnew) {
 	char *p,buf[REDIR_BUFSIZE+1];
 	ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[SYS_write];	
@@ -51,11 +56,9 @@ int mycopy(struct nameidata *nd, struct nameidata *nnew) {
 	int (*sys_close)(int fd)=sys_call_table[SYS_close];
 	int result,inphandle,outphandle,mode=nd->dentry->d_inode->i_mode;
 
-// exclude device/pipe/etc entries
+// exclude device/pipe/socket/dir and proc entries from COW
+	if(is_special(nd)) return -ENODEV;
 
-	if(mode & (S_IFCHR|S_IFBLK|S_IFIFO|S_IFDIR) || 
-	   nd->dentry->d_inode->i_sb->s_magic == PROC_SUPER_MAGIC) 
-		return -ENODEV;
 	mode &= 01777;
 	p = d_path(nd->dentry, nd->mnt, buf, REDIR_BUFSIZE);
 
@@ -222,6 +225,12 @@ int redirect_path_walk(char *name, char **endp,
 		lastnp=np;
 		np=slash;
 	}
+	if(valid1 && (!valid2 || !have_inode(nd))) {
+		if(is_special(nori)) {
+			path_release(nori); valid1=0;
+			if(valid2) { path_release(nd); valid2=0; }
+		} // else TODO: better place for copyonwrite here?
+	}
 	if (!valid2 && valid1) {*nd=*nori;valid1=0;}
 	if (valid1) {
 //		char buf[REDIR_BUFSIZE],buf2[REDIR_BUFSIZE];
@@ -336,7 +345,7 @@ static int redir_handler(ctl_table *table, int write, struct file *filp, void *b
 {
 	int error=0;
 	char backup[REDIR_BUFSIZE+1];
-	int num = table->ctl_name - CTL_TABLE_BASE;
+	int num = table->ctl_name - CTL_ENTRY_BASE;
 	strncpy(backup, table->data, REDIR_BUFSIZE);
 	error = proc_dostring(table,write,filp,buffer,lenp);
 	if (write && !error) {
@@ -376,8 +385,12 @@ static int proc_doint_ro(ctl_table *table, int write, struct file *filp,
 }
 
 
-#define REDIR_ENTRY(n) {CTL_TABLE_BASE+n,#n,&redirs[n].b,REDIR_BUFSIZE-1,0644,NULL,&redir_handler}
+#define REDIR_ENTRY(n) {CTL_ENTRY_BASE+n,#n,&redirs[n].b,REDIR_BUFSIZE-1,0644,NULL,&redir_handler}
 struct ctl_table redirection_dir_table[] = {
+	{CTL_TABLE_BASE+1, "uid",   &translucent_uid,   sizeof(translucent_uid),   0644, NULL, &proc_dointvec},
+	{CTL_TABLE_BASE+2, "gid",   &translucent_gid,   sizeof(translucent_gid),   0644, NULL, &proc_dointvec},
+	{CTL_TABLE_BASE+3, "flags", &translucent_flags, sizeof(translucent_flags), 0644, NULL, &proc_dointvec},
+	{CTL_TABLE_BASE+4, "used",  &translucent_cnt,   sizeof(translucent_cnt),   0444, NULL, &proc_doint_ro},
 	REDIR_ENTRY(0), 
 	REDIR_ENTRY(1),
 	REDIR_ENTRY(2),
@@ -386,10 +399,6 @@ struct ctl_table redirection_dir_table[] = {
 	REDIR_ENTRY(5),
 	REDIR_ENTRY(6),
 	REDIR_ENTRY(7),
-	{CTL_TABLE_BASE+8,  "uid",   &translucent_uid,   sizeof(translucent_uid),   0644, NULL, &proc_dointvec},
-	{CTL_TABLE_BASE+9,  "gid",   &translucent_gid,   sizeof(translucent_gid),   0644, NULL, &proc_dointvec},
-	{CTL_TABLE_BASE+10, "flags", &translucent_flags, sizeof(translucent_flags), 0644, NULL, &proc_dointvec},
-	{CTL_TABLE_BASE+9,  "used",  &translucent_cnt,   sizeof(translucent_cnt),   0444, NULL, &proc_doint_ro},
 	{0}
 };
 struct ctl_table_header *redirection_table_header;

@@ -57,6 +57,7 @@ struct translucent {
 };
 
 #define CTL_TABLE_BASE 0x89194729
+#define CTL_ENTRY_BASE (CTL_TABLE_BASE+5)
 
 extern void* sys_call_table[];
 extern struct translucent redirs[8];
@@ -76,6 +77,7 @@ extern struct ctl_table redirection_table[];
 
 void redirect_namei      (struct nameidata *dest, const struct nameidata *src);
 int  have_inode          (struct nameidata *);
+int  is_special          (struct nameidata *);
 int  is_subdir           (struct dentry *dir, struct dentry *parent);
 void absolutize          (char *name, struct dentry *d, struct vfsmount *m);
 int  redirect_path_walk  (char *name, char **endp, struct nameidata *n, struct nameidata *nori, 
