@@ -55,7 +55,7 @@ int swapoff(const char *path);
 
 --int getdents(unsigned int fd, struct dirent *dirp, unsigned int count);
 --int getdents64(unsigned int fd, struct dirent64 *dirp, unsigned int count);
---int execve(const char *filename, char *const argv [], char *const envp[]);
+--int execve(struct pt_regs regs);
 
 # for connect/bind - possible: accept, getpeername, getsockname, sendto
 :--int socketcall(int call, unsigned long *args);
