@@ -311,7 +311,7 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
 				    p_Cur=malloc(sizeof(struct hash_data_t));
 				    INIT_LIST_HEAD(&(p_Cur->list));
                                     memcpy(&(p_Cur->data), cur, i_Len);
-                                    list_add_tail(&(p_CurList->list), &(p_Cur->list));
+                                    list_add_tail(&(p_Cur->list), &(p_CurList->list));
                                   }
 			        cur=(struct dirent64 *)((char *)cur+i_Len);
 		        }
