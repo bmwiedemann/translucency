@@ -7,8 +7,7 @@ the terms of the GNU GPL version 2, or (at your option) any later version.
  (use it at your own risk and joy!)
 see file COPYING for more details
 
-usage:
-insmod translucency.o from=/given/dir to=/other/dir
+for usage information see translucency manual page
 
 this module will install tweaked syscall handlers that redirect
 each access for files within a given directory to another one while 
@@ -35,3 +34,5 @@ for information on params see base.h (from, to, gid, uid, flags)
 
 latest version should be available at
 http://www.informatik.hu-berlin.de/~wiedeman/development/translucency.tgz
+or from
+http://translucency.sourceforge.net

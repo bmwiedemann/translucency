@@ -1,18 +1,25 @@
 .\" Process this file with
 .\" groff -man -Tascii translucency.8
 .\"
-.TH TRANSLUCENCY 1 "MAY 2002" Linux "System Manual"
+.TH TRANSLUCENCY 8 "JUNE 2002" "Linux 2.4" "System Manual"
 .SH NAME
 translucency \- overlays two file-systems
 .SH SYNOPSIS
-.B insmod translucency.o 
-from=/given/dir to=/other/dir [\fIuid=<int>\fR] [\fIgid=<int>\fR] [\fflags=<int>\fR]
+.B insmod translucency.o
+.RS 0
+echo "/given/dir -> /other/dir" > /proc/sys/translucency/0
+.RS 0
+echo 65534 > /proc/sys/translucency/uid
+.RS 0
+echo 4 > /proc/sys/translucency/flags
 .SH DESCRIPTION
 .B translucency
 will install modified syscall handlers that redirect file operations in such
-a way as to logically merge two directories (presumabely on different
+a way as to logically merge two directories (presumably on different
 file-systems, on different media) into one directory.  
 .SH OPTIONS
+Options can no longer be given at module loading time. 
+Instead they have to be written into the appropriate /proc/sys/translucency/<option> file.
 .IP from=/given/dir
 lower layer - write access is redirected away
 .IP to=/other/dir
@@ -22,28 +29,31 @@ limits overlaying to user with ID <int>
 .IP gid=<int>
 limits overlaying to group with ID <int>
 .IP flags=<int>
-change the module's operation:
+change the module's operation with a bitwise combination of the following:
 .RS 3
-1 (reserved for making lower layer read-only) 
+1 no_translucency: turns module off
 .RS 0
-2 no_copyonwrite
+2 no_copyonwrite: kernel does not try to copy files if needed (i.e. for appending)
 .RS 0
-4 no_translucency: turns module off
-.RS 0
-8 no_getdents: only entries in from are shown in directory listings
+4 no_getdents: only entries in lower layer are shown in directory listings
 .SH AUTHOR
 Bernhard M. Wiedemann <b.m.w@gmx.net>
+.RS 0
+David Bird <dbird@bpnetworks.com>
 .SH KNOWN BUGS
-There are serious buffer overflow conditions not caught but this module,
-which is mainly aimed at productivity (allowing write on CD-ROM) and not on
-security.  Suggestions for improving the security of this module are welcome! 
+.RS 0 
 Double entries for overlaid files are shown
+.RS 0 
 Bad symlink handling
-Functionality has to be extendended...
+.RS 0
+Functionality has to be extended...
+.RS 0
+There are probably serious buffer overflow conditions left in this module.
+Suggestions for improving the security of this module are welcome!
 .SH BUGS
 Report bugs through the bug-tracking system at
 http://translucency.sourceforge.net 
 .SH "SEE ALSO"
-The technique employed is also known as: inheriting (ifs), stacking,
-translucency (tfs), loopback (lofs), overlaying (ovlfs), and union
-file-system 
+The effect is somewhat similar to: inheriting (ifs), stacking (fist),
+translucent (tfs), loopback (lofs), overlaying (ovlfs), and BSDs union
+file system
