@@ -1,0 +1,49 @@
+.\" Process this file with
+.\" groff -man -Tascii translucency.8
+.\"
+.TH TRANSLUCENCY 1 "MAY 2002" Linux "System Manual"
+.SH NAME
+translucency \- overlays two file-systems
+.SH SYNOPSIS
+.B insmod translucency.o 
+from=/given/dir to=/other/dir [\fIuid=<int>\fR] [\fIgid=<int>\fR] [\fflags=<int>\fR]
+.SH DESCRIPTION
+.B translucency
+will install modified syscall handlers that redirect file operations in such
+a way as to logically merge two directories (presumabely on different
+file-systems, on different media) into one directory.  
+.SH OPTIONS
+.IP from=/given/dir
+lower layer - write access is redirected away
+.IP to=/other/dir
+upper layer - written files go here
+.IP uid=<int> 
+limits overlaying to user with ID <int>
+.IP gid=<int>
+limits overlaying to group with ID <int>
+.IP flags=<int>
+change the module's operation:
+.RS 3
+1 (reserved for making lower layer read-only) 
+.RS 0
+2 no_copyonwrite
+.RS 0
+4 no_translucency: turns module off
+.RS 0
+8 no_getdents: only entries in from are shown in directory listings
+.SH AUTHOR
+Bernhard M. Wiedemann <b.m.w@gmx.net>
+.SH KNOWN BUGS
+There are serious buffer overflow conditions not caught but this module,
+which is mainly aimed at productivity (allowing write on CD-ROM) and not on
+security.  Suggestions for improving the security of this module are welcome! 
+Double entries for overlaid files are shown
+Bad symlink handling
+Functionality has to be extendended...
+.SH BUGS
+Report bugs through the bug-tracking system at
+http://translucency.sourceforge.net 
+.SH "SEE ALSO"
+The technique employed is also known as: inheriting (ifs), stacking,
+translucency (tfs), loopback (lofs), overlaying (ovlfs), and union
+file-system 
