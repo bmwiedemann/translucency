@@ -62,12 +62,13 @@ extdiff:
 	gcc -S $(CFLAGS) $<
 install: all
 	gzip -c9 $M.8 > $M.8.gz
-	install -p -m 644 $M.8.gz /usr/share/man/man8/
+	install -d $(DESTDIR){/usr/share/man/man8/,/lib/modules/${KERNELVERSION}/kernel/fs/,/sbin/}
+	install -p -m 644 $M.8.gz $(DESTDIR)/usr/share/man/man8/
 	rm translucency.8.gz
-	install -p -m 644 $M.o /lib/modules/${KERNELVERSION}/kernel/fs/
-	install -p -m 755 mount.translucency /sbin/
+	install -p -m 644 $M.o $(DESTDIR)/lib/modules/${KERNELVERSION}/kernel/fs/
+	install -p -m 755 mount.translucency $(DESTDIR)/sbin/
 uninstall:
-	rm -f /usr/share/man/man8/$M.8.gz /lib/modules/${KERNELVERSION}/kernel/fs/$M.o /sbin/mount.translucency
+	rm -f $(DESTDIR){/usr/share/man/man8/$M.8.gz,/lib/modules/${KERNELVERSION}/kernel/fs/$M.o,/sbin/mount.translucency}
 tar: tgz
 tgz: distclean extension.c
 	chmod a+rX . -R
