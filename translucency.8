@@ -1,61 +1,76 @@
 .\" Process this file with
 .\" groff -man -Tascii translucency.8
 .\"
-.TH TRANSLUCENCY 8 "JUNE 2002" "Linux 2.4" "System Manual"
+.TH TRANSLUCENCY 8 "OCTOBER 2003" "Linux 2.4" "System Manual"
 .SH NAME
-translucency \- overlays two file-systems
+translucency \- overlays file-systems
 .SH SYNOPSIS
-.B insmod translucency.o
+.B insmod translucency
 .RS 0
-echo "/given/dir -> /other/dir" > /proc/sys/translucency/0
+echo "/layer/1 -> /layer/2" > /proc/sys/translucency/0
 .RS 0
 echo 65534 > /proc/sys/translucency/uid
 .RS 0
-echo 4 > /proc/sys/translucency/flags
+echo 16 > /proc/sys/translucency/flags
 .SH DESCRIPTION
 .B translucency
 will install modified syscall handlers that redirect file operations in such
-a way as to logically merge two directories (presumably on different
+a way as to logically merge several directories (presumably on different
 file-systems, on different media) into one directory.  
 .SH OPTIONS
 Options can no longer be given at module loading time. 
 Instead they have to be written into the appropriate /proc/sys/translucency/<option> file.
-.IP from=/given/dir
-lower layer - write access is redirected away
-.IP to=/other/dir
-upper layer - written files go here
+.IP [0-9]* 
+are overlay entries used as seen above: 
+/layer/1
+is lower layer - write access is redirected away.
+/layer/2
+is upper layer - written files go here
 .IP uid=<int> 
-limits overlaying to user with ID <int>
+limits overlaying to user with EUID <int>
 .IP gid=<int>
-limits overlaying to group with ID <int>
+limits overlaying to group with EGID <int>
+.IP fs=<int>
+limits overlaying of mounts to filesystems with this magic number <int> ;
+negative values mean all except the given one ;
+for values see grep SUPER_MAGIC /usr/include/linux/*.h
 .IP flags=<int>
 change the module's operation with a bitwise combination of the following:
-.RS 3
-1 no_translucency: turns module off
-.RS 0
-2 no_copyonwrite: kernel does not try to copy files if needed (i.e. for appending)
-.RS 0
-4 no_getdents: only entries in lower layer are shown in directory listings
-.RS 0
-8 do_downcase: downcase all filenames to avoid inconsistencies on case-insensitive filesystems
-.SH AUTHOR
-Bernhard M. Wiedemann <b.m.w@gmx.net>
-.RS 0
-David Bird <dbird@bpnetworks.com>
-.SH KNOWN BUGS
-.RS 0 
-Double entries for overlaid files are shown
+.RS 7
+.IP 1=no_translucency:
+turns module off
+.IP 2=no_copyonwrite:
+kernel does not try to copy files if needed (i.e. for appending)
+.IP 4=no_getdents: 
+turn off merging directories - only entries in lower layer are shown in directory listings
+.IP 8=do_downcase: 
+downcase all filenames to avoid inconsistencies on case-insensitive filesystems
+.IP 16=no_whiteout: 
+do not automatically create whiteout entries which allow for renaming and deletion of files on r/o filesystems
+.RE
+.\" .IP nextentry=<int>
+.SH NOTES
+This version requires /tmp to be writeable.
+.SH "KNOWN BUGS"
 .RS 0 
 Bad symlink handling
 .RS 0
-Functionality has to be extended...
+Bad .. handling after chdir into a dir that only exists in overlay
+.RS 0
+rmdir and rm -r are often not able to remove a directory stating that is not empty (it contains white-out entries)
 .RS 0
 There are probably serious buffer overflow conditions left in this module.
 Suggestions for improving the security of this module are welcome!
 .SH BUGS
 Report bugs through the bug-tracking system at
-http://translucency.sourceforge.net 
+http://sourceforge.net/projects/translucency/
+.SH AUTHOR
+Bernhard M. Wiedemann <b.m.w@gmx.net>
+.RS 0
+David Bird <dbird@bpnetworks.com>
 .SH "SEE ALSO"
 The effect is somewhat similar to: inheriting (ifs), stacking (fist),
 translucent (tfs), loopback (lofs), overlaying (ovlfs), and BSDs union
 file system
+.SH VERSION
+This manual page applies to translucency 0.6.0
