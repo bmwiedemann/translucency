@@ -23,6 +23,7 @@ D=$M
 O=base.o extension.o staticext.o
 E=extension
 
+KERNELVERSION = $(shell awk -F\" '/UTS_RELEASE/{print $$2}' ${KERNELDIR}/include/linux/version.h )
 KERNELINCLUDE = $(shell if [ "${ARCH}" = "um" ] ; \
 	then echo -I$(KERNELDIR_UM)/include -I$(KERNELDIR_UM)/arch/um/include ; \
 	else echo -I$(KERNELDIR)/include ; fi)
@@ -63,10 +64,10 @@ install: all
 	gzip -c9 $M.8 > $M.8.gz
 	install -p -m 644 $M.8.gz /usr/share/man/man8/
 	rm translucency.8.gz
-	install -p -m 644 $M.o /lib/modules/`uname -r`/kernel/fs/
+	install -p -m 644 $M.o /lib/modules/${KERNELVERSION}/kernel/fs/
 	install -p -m 755 mount.translucency /sbin/
 uninstall:
-	rm -f /usr/share/man/man8/$M.8.gz /lib/modules/`uname -r`/kernel/fs/$M.o /sbin/mount.translucency
+	rm -f /usr/share/man/man8/$M.8.gz /lib/modules/${KERNELVERSION}/kernel/fs/$M.o /sbin/mount.translucency
 tar: tgz
 tgz: distclean extension.c
 	chmod a+rX . -R
