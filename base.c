@@ -70,6 +70,11 @@ inline int is_special(struct nameidata *n) {
 		|| n->dentry->d_inode->i_sb->s_magic==PROC_SUPER_MAGIC);
 }
 
+static inline int translucent_is_deleted(struct nameidata *n) {
+  return n && have_inode(n) && n->dentry->d_inode->i_size==0 &&
+	((n->dentry->d_inode->i_mode&(S_IALLUGO|S_IFMT))==(S_IFREG|01001));
+}
+
 int translucent_copy(struct nameidata *nd, struct nameidata *nnew, int lookup_flags) {
 	char *p,buf[REDIR_BUFSIZE+1];
 	ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[__NR_write];	
@@ -342,6 +347,10 @@ int redirect_path(char *fname, struct translucent *t, int rflags)
 	result=1;
 	for(i=1; i<t->layers; ++i) if(is_subdir(n[top].dentry, t->n[i].dentry)) result=2;
 //	if(result==2) printk(KERN_DEBUG "o: %i %i %s - %s\n",error,l,p,p2);
+	if(translucent_is_deleted(&n[top]) && top>0 && !(rflags&LOOKUP_CREATES)) {
+		//printk(KERN_INFO "translucency: deletion of %s detected\n",fname);
+		result=-ENOENT;
+	}
 out_release:
 	if (!error) path_release(&n[top]);
 	return result;
@@ -474,7 +483,7 @@ int __init translucent_init_module(void)
 	char *buffer_allocated=redirection_dir_table_name_buffer;
 	memset(&redirs, 0, sizeof(redirs));
 	for (i=0; i<REDIRS; ++i) {
-		struct ctl_table new={CTL_ENTRY_BASE+i,buffer_allocated,&redirs[i].b,REDIR_BUFSIZE-1,0644,NULL,&redir_handler};
+		struct ctl_table new={CTL_ENTRY_BASE+i,buffer_allocated,&redirs[i].b,REDIR_BUFSIZE-1,0644,NULL,&redir_handler,NULL,NULL,NULL,NULL};
 		sprintf(buffer_allocated,"%d",i);
 		buffer_allocated+=5;
 		redirection_dir_table[CTL_TABLE_STATIC+i-1]=new;

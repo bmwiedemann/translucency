@@ -129,17 +129,18 @@ foreach(@lines) {
 	my $inputcopy=""; foreach(@inputcopy[1..$#inputcopy]) {$inputcopy.="\n\t\t".$_};
 	my $outputcopy=""; foreach(@outputcopy) { $outputcopy.="\n\t\t".$_}
 	print SOURCE "#if defined(__NR_$funcname)
-$rettype redirecting_sys_$funcname($params)\n{\n";
+$rettype redirecting_sys_$funcname($params)\n{\n\tint rresult;\n";
 	unless($headonly) {
 		print SOURCE "$localdefs
 	$inputcopy[0]
-	if(${redirtype}redirect0(local0)) {
+	if((rresult=${redirtype}redirect0(local0))>0) {
 		$rettype result;$inputcopy
 		BEGIN_KMEM
 			result = orig_sys_$funcname($localparams);
 		END_KMEM$outputcopy
 		if(no_fallback(result)) return result;
 	}
+	if(rresult<0) return rresult;
 	return orig_sys_$funcname($paramnames);
 ";}
 	print SOURCE "}\n#endif\n\n";

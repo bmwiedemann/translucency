@@ -42,7 +42,8 @@
 #define LOOKUP_NODIR	0x20000000
 #define LOOKUP_NOSPECIAL	0x20000000
 #define LOOKUP_TRUNCATE 0x10000000
-#define LOOKUP_TRANSLUCENCY_MASK 0x0fffffff
+#define LOOKUP_CREATES	0x08000000
+#define LOOKUP_TRANSLUCENCY_MASK 0x07ffffff
 
 // 2000 here is too much, since kernel stack is small and mymkdir does one recursion
 #define REDIR_BUFSIZE 1023

@@ -77,9 +77,9 @@ int redirecting_execve_test(char **filename) {
 	int (*access)(const char *pathname, int mode)=sys_call_table[__NR_access];
 	char * (*brk)(void *)=sys_call_table[__NR_brk];
 	char *ret=0, *endaddr, *newendaddr;
-	int result;
+	int result, rresult;
 	if(strncpy_from_user(local0, *filename, REDIR_BUFSIZE)<0) return -EFAULT;
-	if(!redirect0(local0)) return 0;
+	if((rresult=redirect0(local0))<=0) return rresult;
 //	printk(KERN_INFO SYSLOGID ": execve %s %s\n",current->comm, local0);
 	if(strcmp(current->comm, "keventd")) {	// keventd execs "/sbin/hotplug" -> brk oopses
 		endaddr=brk(0);
@@ -139,13 +139,14 @@ int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 	}
 	//TODO: consider O_EXCL|O_CREAT here
 	if(strncpy_from_user(local0, pathname, REDIR_BUFSIZE)<0) return -EFAULT;
-	if((rresult=redirect_path(local0,0, dflags | extraflags))) {
+	if((rresult=redirect_path(local0,0, dflags | extraflags))>0) {
 		int result;
 		BEGIN_KMEM
 			result = orig_sys_open(local0, redirflags, mode);
 		END_KMEM
 		if(no_fallback(result)) return result;
 	}
+	if(rresult<0) return rresult;
 	return orig_sys_open(pathname, oflags, mode);
 }
 #endif
@@ -154,10 +155,13 @@ int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 int redirecting_sys_chdir(const char *path)
 {
 	char local0[REDIR_BUFSIZE];
-	int result = orig_sys_chdir(path);
-	if(result>=0) return result;
+	int result, rresult;
 	if(strncpy_from_user(local0, path, REDIR_BUFSIZE)<0) return -EFAULT;
-	if(redirect0(local0)) {
+	rresult=redirect0(local0);
+	if(rresult<0) return rresult;
+	result = orig_sys_chdir(path);
+	if(result>=0) return result;
+	if(rresult) {
 		BEGIN_KMEM
 			result = orig_sys_chdir(local0);
 		END_KMEM
@@ -174,13 +178,15 @@ int redirecting_sys_symlink(const char *oldpath, const char *newpath)
 	int rresult;
 	if(strncpy_from_user(local1, newpath, REDIR_BUFSIZE)<0) return -EFAULT;
 	if((rresult=dredirect0(local1))>0) {
-		int result;	if(strncpy_from_user(local0, oldpath, REDIR_BUFSIZE)<0)return -EFAULT; //redirect(local0);
-//FIXME		if(local0[0]!='/' && is_subdir(current->fs->pwd,n1.dentry) && rresult>1) absolutize(local0,current->fs->pwd, current->fs->pwdmnt);
+		int result;
+		if(strncpy_from_user(local0, oldpath, REDIR_BUFSIZE)<0)return -EFAULT; //redirect(local0);
+//TODO: implement proper symlink handling		if(local0[0]!='/' && is_subdir(current->fs->pwd,n1.dentry) && rresult>1) absolutize(local0,current->fs->pwd, current->fs->pwdmnt);
 		BEGIN_KMEM
 			result = orig_sys_symlink(local0, local1);
 		END_KMEM
 		if(no_fallback(result)) return result;
 	}
+	if(rresult<0) return rresult;
 	return orig_sys_symlink(oldpath, newpath);
 }
 #endif
@@ -199,13 +205,14 @@ int redirecting_sys_socketcall(int call, unsigned long *args)
 		if(sa.sa_family==AF_UNIX) {
 			struct sockaddr_un local1;
 			char local0[REDIR_BUFSIZE];
+			int rresult=0;
 			unsigned int len2;
 			largs[2]-=sizeof(local1.sun_family);
 			if(largs[2]>sizeof(local1.sun_path)) largs[2]=sizeof(local1.sun_path);
 			if(copy_from_user(local0, &(((struct sockaddr_un*)largs[1])->sun_path), largs[2])) return -EFAULT;
 			local0[largs[2]]=0;
 //			printk("redirecting process %s %lu %lX %lu socket %s ",current->comm, largs[0], largs[1], largs[2], local0);
-			if(local0[0] && dredirect0(local0) && (len2=strlen(local0))<sizeof(local1.sun_path)) {
+			if(local0[0] && (rresult=dredirect0(local0))>0 && (len2=strlen(local0))<sizeof(local1.sun_path)) {
 				int result;
 				largs[1]=(unsigned long)(&local1);
 				local1.sun_family=sa.sa_family;
@@ -217,6 +224,7 @@ int redirecting_sys_socketcall(int call, unsigned long *args)
 //				printk("to %s %lu -> return %i\n", local0, largs[2], result);
 				return result;
 			}
+			if(rresult<0) return rresult;
 //			printk("\n");
 		}
 	}
