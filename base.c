@@ -63,7 +63,7 @@ int mycopy(struct nameidata *nd, struct nameidata *nnew) {
 	mode &= S_IRWXUGO;
 	p = d_path(nd->dentry, nd->mnt, buf, REDIR_BUFSIZE);
 
-//	printk(KERN_INFO "redir-copy-on-write: %s %o\n",p,mode);
+//	printk(KERN_DEBUG SYSLOGID ": copy-on-write %s %o\n",p,mode);
 
 	BEGIN_KMEM
 		result=orig_sys_open(p,O_RDONLY,0666);
@@ -75,30 +75,33 @@ int mycopy(struct nameidata *nd, struct nameidata *nnew) {
 	BEGIN_KMEM
 		result=orig_sys_open(p,O_WRONLY|O_CREAT,mode);
 	END_KMEM
-	if(result<0) return result;
+	if(result<0) goto out_close;
 	outphandle=result;
 
 	BEGIN_KMEM
 		while((result=sys_read(inphandle,buf,REDIR_BUFSIZE))>0&&sys_write(outphandle,buf,result)>0);
 	END_KMEM
 
-	sys_close(inphandle);
 	sys_close(outphandle);
-	return 0;
+out_close:
+	sys_close(inphandle);
+	return result;
 }
 
 int mymkdir(struct nameidata *nd, struct nameidata *n, int mode, struct translucent *t) {
 	char *p,buf[REDIR_BUFSIZE+1];
-	int result;
+	int result, umask=current->fs->umask;
 	if ((translucent_flags&no_copyonwrite)) return -1;
 	mode &= 07777;
 	p = namei_to_path(nd, buf);
 	memmove(buf,p,strlen(p)+1);
 //	printk(KERN_DEBUG SYSLOGID ": mkdir %s %.4o\n",buf,mode);
 	if(redirect(t,buf)) {
+		current->fs->umask = 0;
 		BEGIN_KMEM
 			result=orig_sys_mkdir(buf,mode);
 		END_KMEM
+		current->fs->umask = umask;
 		path_init(buf,nd->flags,n);path_walk(buf,n); //re-init nd
 		return result;
 	}
@@ -177,8 +180,8 @@ inline int any_valid(int layers, char *valid)
 int redirect_path_walk(char *name, char **endp, 
 		       struct nameidata *n, struct translucent *t) 
 {
-	char savedchar=0,*slash=name,*np=name,*lastnp=NULL,error=0,something_redirected=0,valid[MAX_LAYERS];
-	int lflags=n->flags,i,j;
+	char savedchar=0,*slash=name,*np=name,*lastnp=NULL,something_redirected=0,valid[MAX_LAYERS];
+	int lflags=n->flags,error=0,i,j;
 	n->flags &= LOOKUP_TRANSLUCENCY_MASK;
 	memset(valid, 1, sizeof(valid));
 
@@ -224,41 +227,54 @@ int redirect_path_walk(char *name, char **endp,
 	}	// end of main redirect/walking loop
 
 	if(!slash && valid[t->layers-1] && !have_inode(&n[t->layers-1])) {
-		int mode;
+		int mode, umask=current->fs->umask;
 		for(j=t->layers-2; j>=0; --j) if(valid[j] && have_inode(&n[j])) break;
+		error=0;
 		if (j>=0) {
+			current->fs->umask=0;
+			// prevent COW and overlaying of files in topmost dir
+			if(is_subdir(n[j].dentry, t->n[t->layers-1].dentry)) error = -1;
+			else {
 		 mode=n[j].dentry->d_inode->i_mode;
 		 // this does COW
 		 if(is_special(&n[j])) {
-			if((lflags&LOOKUP_NOSPECIAL)) {
-				path_release(&n[t->layers-1]); valid[t->layers-1]=0;
-			} else if((lflags&LOOKUP_CREATE) && (S_ISBLK(mode) || S_ISCHR(mode)) && !(translucent_flags&no_copyonwrite)) {
+			if((lflags&LOOKUP_NOSPECIAL)) error = -1; // no mknod on echo > /dev/null
+			else if((lflags&LOOKUP_CREATE) && (S_ISBLK(mode) || S_ISCHR(mode)) && !(translucent_flags&no_copyonwrite)) {
 				// this is inlined quasi "mymknod"
 				char buf[REDIR_BUFSIZE],*p=namei_to_path(&n[t->layers-1],buf);
+				memmove(buf,p,strlen(p)+1);p=buf;
 //				printk(KERN_DEBUG SYSLOGID ": mknod %s %.6o %X\n",p,mode,n[j].dentry->d_inode->i_rdev);
 				BEGIN_KMEM
-					orig_sys_mknod(p,mode,n[j].dentry->d_inode->i_rdev);
+					error = orig_sys_mknod(p,mode,n[j].dentry->d_inode->i_rdev);
 				END_KMEM
 			}
 		 } else if((lflags&LOOKUP_CREATE) && !(translucent_flags&no_copyonwrite)) {
 //			char buf[REDIR_BUFSIZE];printk(KERN_DEBUG SYSLOGID ": mycopy %s %.6o\n",namei_to_path(nd,buf),mode);
-			mycopy(&n[j],&n[t->layers-1]);
+			error = mycopy(&n[j],&n[t->layers-1]);
 		 }
+			}
+			current->fs->umask = umask;
+			if(error) { path_release(&n[t->layers-1]); valid[t->layers-1]=0; }
 		}
 	}
+
+	// now free unredirected paths
 	i=any_valid(t->layers,valid);
 	while (i>0 && n[i].dentry==n[0].dentry) {
 		path_release(&n[i]);
 		valid[i]=0;
 		i=any_valid(i,valid);
 	}
-	while (i>0 && (lflags&LOOKUP_NODIR) &&
-	 have_inode(&n[i]) && S_ISDIR(n[i].dentry->d_inode->i_mode)) {
-		path_release(&n[i]);
-		valid[i]=0;
-		i=any_valid(i,valid);
+	// return dir in lowest layer to open(dir) call
+	if(i>0 && (lflags&LOOKUP_NODIR)) {
+		for(j=0; j<=i; ++j) if(valid[j] && have_inode(&n[j]) && S_ISDIR(n[j].dentry->d_inode->i_mode)) break;
+		for(; i>j; --i) if(valid[i]) {
+			path_release(&n[i]);
+			valid[i]=0;
+		}
 	}
-	for(j=i-1; j>=0; --j) if(valid[j]) path_release(&n[j]);
+	// return index of uppermost layer with valid entry
+	for(j=i-1; j>=0; --j) if(valid[j]) path_release(&n[j]); //valid[j]=0; }
 	if (endp) *endp=(slash?lastnp:NULL);
 	return (i);
 }
