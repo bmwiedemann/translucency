@@ -16,6 +16,7 @@ struct translucent redirs[REDIRS];
 char translucent_delimiter[16]=" -> ";	// set to "" for binfmt_misc syntax
 int translucent_uid   = ANYUID;
 int translucent_gid   = ANYUID;
+int translucent_fs    = 0;
 int translucent_flags = 0;
 int translucent_cnt   = 0;
 
@@ -24,6 +25,25 @@ static inline int match_uids(void)
    struct task_struct *p = current;
    return (( translucent_uid == ANYUID || translucent_uid == p->euid) &&
 	   ( translucent_gid == ANYUID || translucent_gid == p->egid));
+}
+
+static inline int match_fs(const struct nameidata *n, const struct translucent *t)
+{
+	int magic;
+	//TODO: remove debug entries if never seen in syslog for months
+	if(!n) {printk("DEBUG0a");return 0;}
+	if(!n->dentry) {printk("DEBUG1a");return 0;}
+	if(!n->dentry->d_inode) {printk("DEBUG2a");return 0;}
+	if(!n->dentry->d_inode->i_sb) {printk("DEBUG3a");return 0;}
+	if(!t) {printk("DEBUG0b");return 0;}
+	if(!t->n[0].dentry) {printk("DEBUG1b");return 0;}
+	if(!t->n[0].dentry->d_inode) {printk("DEBUG2b");return 0;}
+	if(!t->n[0].dentry->d_inode->i_sb) {printk("DEBUG3b");return 0;}
+	magic=n->dentry->d_inode->i_sb->s_magic;
+	if(magic==t->n[0].dentry->d_inode->i_sb->s_magic ||
+		(translucent_fs>0 && magic==translucent_fs) ||
+		(translucent_fs<0 && magic!=-translucent_fs)) return 1;
+	return 0;
 }
 
 void redirect_namei(struct nameidata *dest, const struct nameidata *src) {
@@ -204,6 +224,11 @@ int redirect_path_walk(char *name, char **endp,
 			} 
 			else if (!error && !have_inode(&n[i])) { path_release(&n[i]); error = -1; }
 			if (error) valid[i] = 0;
+			if(something_redirected && i==0 && valid[i] && !match_fs(&n[i],t))
+			  for(i=0; i<t->layers; ++i) if(valid[i]) {
+				path_release(&n[i]);
+				valid[i]=0;
+			  }
 		}
 		if (slash) { *slash = savedchar; }
 
@@ -430,6 +455,7 @@ struct ctl_table redirection_dir_table[REDIRS+CTL_TABLE_STATIC] = {
 	{CTL_TABLE_BASE+1, "uid",   &translucent_uid,   sizeof(translucent_uid),   0644, NULL, &proc_dointvec},
 	{CTL_TABLE_BASE+2, "gid",   &translucent_gid,   sizeof(translucent_gid),   0644, NULL, &proc_dointvec},
 	{CTL_TABLE_BASE+3, "flags", &translucent_flags, sizeof(translucent_flags), 0644, NULL, &proc_dointvec},
+	{CTL_TABLE_BASE+6, "fs",    &translucent_fs,    sizeof(translucent_fs),    0644, NULL, &proc_dointvec},
 	{CTL_TABLE_BASE+4, "used",  &translucent_cnt,   sizeof(translucent_cnt),   0444, NULL, &proc_doint_ro},
 	{CTL_TABLE_BASE+5, "delimiter", &translucent_delimiter, sizeof(translucent_flags), 0644, NULL, &proc_dostring},
 };
