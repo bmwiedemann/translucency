@@ -211,18 +211,19 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
         linked_list_t **p_CurList, *p_Cur;
         void *p_Data;
 	struct dirent64 *cur, *cur2;
-        int outfd, curdirfd, i_Valid=0, i_Layer;
+        int outfd, curdirfd, /*i_Valid=0, i_LastValid=0,*/ i_Layer;
 //        char buf[REDIR_BUFSIZE], s_File[REDIR_BUFSIZE];
 	char *p=NULL, *ps;
 //        printk(SYSLOGID ": mi0\n");
-        for(i_Layer=0; i_Layer<i_Layers; ++i_Layer) {
+/*        for(i_Layer=0; i_Layer<i_Layers; ++i_Layer) {
                 if(n[i_Layer].dentry==NULL) continue;
                 i_Valid++;
+                i_LastValid=i_Layer;
         }
-        if(i_Valid<=1 && n[0].dentry) {
+        if(i_Valid<=1 && n[0].dentry) { // take a shortcut when there is only one layer
                 printk(SYSLOGID ": debugmi1\n");
-                return 26;
-        }
+                return i_LastValid;
+        }*/
         for(i_Layer=0; i_Layer<i_Layers; i_Layer++) {
                 if(n[i_Layer].dentry==NULL) {
                         continue;
@@ -306,7 +307,7 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
             linked_list_finish(&hashtable[i]);
         }
         sys_lseek(outfd, 0, 0/*SEEK_SET*/);
-        return outfd;
+        return outfd+MAX_LAYERS;
 }
 
 void absolutize(char *name, struct dentry *d, struct vfsmount *m) {
@@ -473,14 +474,22 @@ int redirect_path_walk(char *name, char **endp,
                 i=any_valid(i,valid);
         }
 	// if topmost entry is a directory merge dirs
-	if(i>0 && (lflags&LOOKUP_OPEN) && !(t->flags&no_getdents)) {
-                for(j=i-1; j>=0; --j) if(valid[j] && have_inode(&n[j])) {
+	if(i>0 && (lflags&LOOKUP_OPEN)) {
+            if((translucent_flags&no_getdents)) {
+                for(j=0; j<=i; ++j) if(valid[j] && have_inode(&n[j]) && S_ISDIR(n[j].dentry->d_inode->i_mode)) break;
+                for(; i>j; --i) if(valid[i]) {
+                        path_release(&n[i]);
+                        valid[i]=0;
+                }
+            } else {
+                for(j=i; j>=0; --j) if(valid[j] && have_inode(&n[j])) {
                         if(S_ISDIR(n[j].dentry->d_inode->i_mode)) {
 				for(i=0; i<MAX_LAYERS; ++i)
 			                if(!valid[i]) n[i].dentry=NULL; // mark invalid
 				return MAX_LAYERS;
-			} else break;
+                        } else break;
                 }
+            }
 	}
 	// return index of uppermost layer with valid entry
 	for(j=i-1; j>=0; --j) if(valid[j]) path_release(&n[j]); //valid[j]=0; }
@@ -520,7 +529,8 @@ int redirect_path(char *fname, struct translucent *t, int rflags)
         if(top==MAX_LAYERS) { // special merge-dir handling
                 top=translucent_merge_init(MAX_LAYERS, n);
 		if(top<0) return top;
-                return (top+1)<<4;
+                if(top>=MAX_LAYERS) return (top+1-MAX_LAYERS)<<4;
+                // else continue as usual with the given layer
         }
 	p = d_path(n[top].dentry, n[top].mnt, fname, REDIR_BUFSIZE);
 	memmove(fname,p,strlen(p)+1);
