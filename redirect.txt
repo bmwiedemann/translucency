@@ -1,6 +1,6 @@
 # this is an input file for makeext.pl
 #
-# meaning of the preceeding + and - is as follows
+# meaning of the leading + and - is as follows
 # +  function body that does mkdir-on-the-fly
 # ++ function body that does above and copy-on-the-fly
 # -  function is auto-generated with empty body to be patched in
@@ -35,6 +35,14 @@ int rmdir(const char *pathname);
 ++int utimes(const char *filename, const struct timeval *buf);
 #int statfs(const char *path, struct statfs *buf);
 #int acct(const char *filename);
+++int setxattr (const char *path, const char *name, const void *value, size_t size, int flags);
+++int lsetxattr (const char *path, const char *name, const void *value, size_t size, int flags);
+ssize_t getxattr (const char *path, const char *name, void *value, size_t size);
+ssize_t lgetxattr (const char *path, const char *name, void *value, size_t size);
+ssize_t listxattr (const char *path, char *list, size_t size);
+ssize_t llistxattr (const char *path, char *list, size_t size);
+int removexattr (const char *path, const char *name);
+int lremovexattr (const char *path, const char *name);
 
 int swapon(const char *path, int swapflags);
 int swapoff(const char *path);

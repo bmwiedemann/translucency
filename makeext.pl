@@ -69,6 +69,7 @@ foreach(@lines) {
 	my $redirtype=0; while(s/^\+//g) {$redirtype++;}
 	$redirtype=("","d","w")[$redirtype];
 	unless(/$funcre/) {next}
+	if($headonly>1) {next}
 	my $rettype=$1;
 	my $funcname=$2;
 	my $params=$3;
@@ -79,6 +80,7 @@ foreach(@lines) {
 	my @inputcopy=();
 	my @outputcopy=();
 	my $varcount=0;
+	my $xn;
 	foreach(@params) {
 	  /(\w+)$/;
 	  my $name=$1;push(@paramnames,$name);
@@ -88,35 +90,55 @@ foreach(@lines) {
 		my $input=s/const//g;s/^\s*//;s/\s*$//;
 		my $def="\t$_ $n";
 		my $addr="";
+		my $pn=$paramnames[$varcount];
+		my $nn=$params[$varcount+1];
+		$nn=~s/.*\W// if $nn; # name of following var
 		if(/char/) {$def.="[REDIR_BUFSIZE]";
-			if($input) {my $c=($varcount==1)?" redirect0($n);":"";push(@inputcopy,"\tif(strncpy_from_user($n, $paramnames[$varcount], REDIR_BUFSIZE)<0) return -EFAULT;$c")}
-			else {push(@outputcopy,"\t\tif(result>=0){if(copy_to_user($paramnames[$varcount], local$varcount, result)) return -EFAULT;}\n")}
+			if($input) {my $c=($varcount>=1 && $pn=~/path|file/)?" redirect0($n);":"";push(@inputcopy,"if(strncpy_from_user($n, $pn, REDIR_BUFSIZE)<0) return -EFAULT;$c")}
+			else {
+				$xn=$n."size";
+				splice(@inputcopy,1,0,"size_t $xn=($nn<REDIR_BUFSIZE?$nn:REDIR_BUFSIZE);");
+				push(@outputcopy,"if(result>=0){if(copy_to_user($pn, $n, result)) return -EFAULT;}")
+			}
+		} elsif(/void/) {
+			$addr="p";
+			$def=~s/$n/*p$n=NULL/;
+			push(@inputcopy,"if($nn>0 && $pn) { p$n=kmalloc($nn,GFP_KERNEL); }");
+			if($input) {
+				$inputcopy[-1]=~s/}/if(copy_from_user(p$n, $pn, $nn)) {kfree(p$n);return -EFAULT;} }/;
+			}
+			else {
+				push(@outputcopy,"if(p$n && result>=0 && $nn>0 && copy_to_user($paramnames[$varcount], p$n, result)) {kfree(p$n);return -EFAULT;}");
+			}
+			push(@outputcopy,"if(p$n) kfree(p$n);");
 		} else {
-			if($input) {$addr="p"; $def.=", *p$n=NULL";push(@inputcopy,"\n\t\tif($paramnames[$varcount] && copy_from_user((p$n=&$n), $paramnames[$varcount], sizeof($n))) return -EFAULT;")}
-			else {$addr="&"; push(@outputcopy,"\t\tif(copy_to_user($paramnames[$varcount], &$n, sizeof($n))) return -EFAULT;\n")}
+			if($input) {$addr="p"; $def.=", *p$n=NULL";push(@inputcopy,"if($pn && copy_from_user((p$n=&$n), $pn, sizeof($n))) return -EFAULT;")}
+			else {$addr="&"; push(@outputcopy,"if(copy_to_user($pn, &$n, sizeof($n))) return -EFAULT;")}
 		}
 		push(@localdefs,$def.";");
 		push(@localparams,"$addr$n");
-	  } else {push(@localparams,$name)}
+	  } else {
+	  	if($xn) { $name=$xn; $xn=undef; }
+	  	push(@localparams,$name);
+	  }
 	  $varcount++;
 	}
 	my $paramnames=join(", ", @paramnames);
 	my $localdefs=join("\n",@localdefs); #"char local0[REDIR_BUFSIZE+1];";
 	my $localparams=join(", ", @localparams);
-	my $inputcopy=join("\n\t",@inputcopy[1..$#inputcopy]);
-	my $outputcopy=join("",@outputcopy);
-	if($headonly>1) {next}
+	my $inputcopy=""; foreach(@inputcopy[1..$#inputcopy]) {$inputcopy.="\n\t\t".$_};
+	my $outputcopy=""; foreach(@outputcopy) { $outputcopy.="\n\t\t".$_}
 	print SOURCE "#if defined(__NR_$funcname)
 $rettype redirecting_sys_$funcname($params)\n{\n";
 	unless($headonly) {
 		print SOURCE "$localdefs
-$inputcopy[0]
+	$inputcopy[0]
 	if(${redirtype}redirect0(local0)) {
 		$rettype result;$inputcopy
 		BEGIN_KMEM
 			result = orig_sys_$funcname($localparams);
-		END_KMEM
-$outputcopy		if(no_fallback(result)) return result;
+		END_KMEM$outputcopy
+		if(no_fallback(result)) return result;
 	}
 	return orig_sys_$funcname($paramnames);
 ";}
