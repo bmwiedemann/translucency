@@ -1,4 +1,10 @@
 # this is an input file for makeext.pl
+#
+# meaning of the trailing + and - is as follows
+# +  function body that does mkdir-on-the-fly
+# ++ function body that does above and copy-on-the-fly
+# -  function is auto-generated with empty body to be patched in
+# -- no function body
 
 --int open(const char *pathname, int oflags, mode_t mode);
 +int creat(const char *pathname, mode_t mode);
