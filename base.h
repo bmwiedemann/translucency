@@ -14,12 +14,12 @@
 #define MAKING_MODULES 1
 
 
+#include <linux/types.h>
 #include <asm/current.h>
 #include <asm/uaccess.h>
 #include <asm/string.h>
 #include <asm/segment.h>
 #include <asm/unistd.h>
-#include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/module.h>
 #include <linux/kernel.h>

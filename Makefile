@@ -121,7 +121,7 @@ test: $M.o testfiles
 	insmod $M.o 
 	echo "$F -> $T" > /proc/sys/translucency/0
 	-find $T $F | sort
-	-find $F/link5/ $F/link8/	#$F/link6
+	-find $F/link5/ $F/link8/ | sort	#$F/link6
 	-sleep 1
 	-cat $F/test
 	-cat $F/static
