@@ -140,7 +140,7 @@ int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 	if((oflags&O_CREAT)) extraflags|=LOOKUP_CREATES;
 	//TODO: consider O_EXCL|O_CREAT here
 	if(strncpy_from_user(local0, pathname, REDIR_BUFSIZE)<0) return -EFAULT;
-	if((rresult=redirect_path(local0,0, dflags | extraflags))>0) {
+	if((rresult=redirect2(local0, dflags | extraflags))>0) {
 		int result;
 		BEGIN_KMEM
 			if(rresult&4) orig_sys_unlink(local0);
@@ -199,7 +199,7 @@ int redirecting_sys_socketcall(int call, unsigned long *args)
 			if(copy_from_user(local0, &(((struct sockaddr_un*)largs[1])->sun_path), largs[2])) return -EFAULT;
 			local0[largs[2]]=0;
 //			printk("redirecting process %s %lu %lX %lu socket %s ",current->comm, largs[0], largs[1], largs[2], local0);
-			if(local0[0] && (rresult=dredirect0(local0))>0 && (len2=strlen(local0))<sizeof(local1.sun_path)) {
+			if(local0[0] && (rresult=redirect2(local0, LOOKUP_MKDIR|LOOKUP_CREATES))>0 && (len2=strlen(local0))<sizeof(local1.sun_path)) {
 				int result;
 				largs[1]=(unsigned long)(&local1);
 				local1.sun_family=sa.sa_family;

@@ -286,7 +286,8 @@ int redirect_path_walk(char *name, char **endp,
 		 mode=n[j].dentry->d_inode->i_mode;
 		 // this does COW
 		 if(is_special(&n[j])) {
-			if((lflags&LOOKUP_NOSPECIAL)) error = -1; // no mknod on echo > /dev/null
+                        if(S_ISDIR(mode) && (lflags&LOOKUP_CREATE)) mymkdir2(&n[j], &n[t->layers-1], t);
+			else if((lflags&LOOKUP_NOSPECIAL)) error = -1; // no mknod on echo > /dev/null
 			else if((lflags&LOOKUP_CREATE) && (S_ISBLK(mode) || S_ISCHR(mode)) && !(translucent_flags&no_copyonwrite)) {
 				// this is inlined quasi "mymknod"
 				char buf[REDIR_BUFSIZE],*p=namei_to_path(&n[t->layers-1],buf);

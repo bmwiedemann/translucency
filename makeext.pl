@@ -132,8 +132,12 @@ foreach(@lines) {
 	}
 	if($creation&1) { push(@inputcopy, "if(rresult&4) BEGIN_KMEM orig_sys_unlink($laststr); END_KMEM"); push(@outputcopy, "if(result<0 && rresult&4) translucent_create_whiteout($laststr);"); }
 	if($creation&2) { $redirflags.="|LOOKUP_TRUNCATE"; push(@outputcopy, "if(result==0 && (rresult&2) && (translucent_flags&do_whiteout)) translucent_create_whiteout(local0);"); }
+
+# individual patches
 	if($funcname eq "symlink") {my $h=$inputcopy[1];$inputcopy[1]=$inputcopy[0];$h=~s/rresult.*//;$inputcopy[0]=$h;$firststr=$laststr;}
 	if($funcname eq "access") {$redirflags.="|(mode==2/*W_OK*/?LOOKUP_MKDIR|LOOKUP_CREATE:0)"}
+	if($funcname eq "mkdir") {$inputcopy[0].=" rresult=strlen(local0)-1;if(local0[rresult]=='/'){local0[rresult]=0;}";}
+
 	my $paramnames=join(", ", @paramnames);
 	my $localdefs=join("\n",@localdefs); #"char local0[REDIR_BUFSIZE+1];";
 	my $localparams=join(", ", @localparams);
