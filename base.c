@@ -106,18 +106,22 @@ int translucent_create_whiteout(char *file) {
 }
 
 int translucent_copy(struct nameidata *nd, struct nameidata *nnew, int lookup_flags) {
-	char *p, *buf;
+	char *p, *buf, *pathbuf;
 	ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[__NR_write];	
 	ssize_t (*sys_read)(int fd, void *buf, size_t count)=sys_call_table[__NR_read];
 	int (*sys_close)(int fd)=sys_call_table[__NR_close];
-	int result,inphandle,outphandle,mode=nd->dentry->d_inode->i_mode;
+	int result,inphandle,outphandle;
+	int i_Bufsize=4096;
+	umode_t mode=nd->dentry->d_inode->i_mode;
+	struct utimbuf timebuf={ actime:nd->dentry->d_inode->i_atime, modtime:nd->dentry->d_inode->i_mtime };
 
 // exclude device/pipe/socket/dir and proc entries from COW
 	if(is_special(nd)) return -ENODEV;
 
 	mode &= S_IRWXUGO;
-        buf=malloc(REDIR_BUFSIZE+1);
-	p = d_path(nd->dentry, nd->mnt, buf, REDIR_BUFSIZE);
+        buf=malloc(i_Bufsize);
+        pathbuf=malloc(REDIR_BUFSIZE+1);
+	p = d_path(nd->dentry, nd->mnt, pathbuf, REDIR_BUFSIZE);
 
 //	printk(KERN_DEBUG SYSLOGID ": copy-on-write %s %o\n",p,mode);
 
@@ -127,7 +131,7 @@ int translucent_copy(struct nameidata *nd, struct nameidata *nnew, int lookup_fl
 	if(result<0) goto out_free;
 	inphandle=result;
 
-	p=d_path(nnew->dentry, nnew->mnt, buf, REDIR_BUFSIZE);
+	p=d_path(nnew->dentry, nnew->mnt, pathbuf, REDIR_BUFSIZE);
 	BEGIN_KMEM
 		result=orig_sys_open(p,O_WRONLY|O_CREAT,mode);
 	END_KMEM
@@ -136,14 +140,18 @@ int translucent_copy(struct nameidata *nd, struct nameidata *nnew, int lookup_fl
 
 	if(!(lookup_flags&LOOKUP_TRUNCATE)) {
 		BEGIN_KMEM
-			while((result=sys_read(inphandle,buf,REDIR_BUFSIZE))>0&&sys_write(outphandle,buf,result)>0);
+			while((result=sys_read(inphandle,buf,i_Bufsize))>0&&sys_write(outphandle,buf,result)>0);
 		END_KMEM
 	} else result=0;
 	sys_close(outphandle);
+	BEGIN_KMEM
+		orig_sys_utime(p, &timebuf);
+	END_KMEM
 out_close:
 	sys_close(inphandle);
 out_free:
         free(buf);
+        free(pathbuf);
 	return result;
 }
 
