@@ -1,7 +1,7 @@
-CFLAGS=-O2 -Werror -Wall -Wstrict-prototypes -fomit-frame-pointer -pipe -fno-strength-reduce -nostdinc -I/usr/src/linux/include -I. -I/usr/include
+K=/usr/src/linux
+CFLAGS=-O2 -Werror -Wall -Wstrict-prototypes -fomit-frame-pointer -pipe -fno-strength-reduce -nostdinc -I$K/include -I. -I/usr/include
 F=/tmp/fromdir/
 T=/tmp/todir/
-K=/usr/src/linux
 M=translucency
 D=$M/
 O=base.o extension.o sysctl.o staticext.o
@@ -26,9 +26,9 @@ extdiff:
 	mv $En.c $E.c
 
 %.o: %.c base.h compatibility.h
-	gcc -c $(CFLAGS) $<
+	gcc -c $(CFLAGS) $(INCLUDE) $<
 %.s: %.c Makefile
-	gcc -S -c $(CFLAGS) $<
+	gcc -S $(CFLAGS) $(INCLUDE) $<
 
 tgz: clean
 	(cd .. ; tar c $D* | gzip -9 >$M.tgz)
