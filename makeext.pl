@@ -81,8 +81,10 @@ foreach(@lines) {
 	my @localdefs=();
 	my @inputcopy=();
 	my @outputcopy=();
+        my @redir=();
 	my $varcount=0;
 	my $xn;
+        my $lastresult="rresult";
 	my $laststr;
 	my $firststr;
         if($creation&1) { $redirflags.="|LOOKUP_CREATES" }
@@ -100,10 +102,15 @@ foreach(@lines) {
 		$nn=~s/.*\W// if $nn; # name of following var
 		if(/char/) {
 			$def.="[REDIR_BUFSIZE]";
-			$laststr=$n;
 			$firststr=$n unless defined $firststr;
-			if($input) {my $c=($varcount>=1 && $pn=~/path|file/)?"if((rresult=redirect2($n, $redirflags))<0) return rresult;":"";push(@inputcopy,"if(strncpy_from_user($n, $pn, REDIR_BUFSIZE)<0) return -EFAULT;");if($c){push(@inputcopy,$c)}}
-			else {
+			if($input) {
+                                my $ispath=($pn=~/path|file/);
+                                push(@inputcopy,"if(strncpy_from_user($n, $pn, REDIR_BUFSIZE)<0) return -EFAULT;");
+                                if($ispath){
+                                        $laststr=$n;
+                                        if($varcount>=1){push(@localdefs,"\tint rresult2;");$lastresult="rresult2";push(@inputcopy,"if((rresult2=redirect2($n, $redirflags))<0) return rresult2;");}}
+                                        push(@redir,[$n,$pn,$lastresult,$redirflags]);
+                        } else {
 				$xn=$n."size";
 				splice(@inputcopy,1,0,"size_t $xn=($nn<REDIR_BUFSIZE?$nn:REDIR_BUFSIZE);");
 				push(@outputcopy,"if(result>=0){if(copy_to_user($pn, $n, result)) return -EFAULT;}")
@@ -132,16 +139,19 @@ foreach(@lines) {
 	  $varcount++;
 	}
 	my $manyargs=$laststr ne $firststr;
+	if($funcname eq "symlink") {my $h=$inputcopy[1];$inputcopy[1]=$inputcopy[0];$inputcopy[0]=$h;$firststr=$laststr;$inputcopy[2]="";$localdefs[1]="";$lastresult="rresult";}
 	if($creation&1) {
-		push(@inputcopy, "if(rresult&4) BEGIN_KMEM orig_sys_unlink($laststr); END_KMEM");
-		push(@outputcopy, "if(result<0 && rresult&4) translucent_create_whiteout($laststr);"); 
+		push(@inputcopy, "if($lastresult&4) BEGIN_KMEM orig_sys_unlink($laststr); END_KMEM");
+		push(@outputcopy, "if(result<0 && $lastresult&4) translucent_create_whiteout($laststr);"); 
 	}
-	if($creation&2) { $redirflags.="|LOOKUP_TRUNCATE"; push(@outputcopy, "if(result==0 && (rresult&2) && (translucent_flags&do_whiteout)) translucent_create_whiteout(local0);"); }
+	if($creation&2) { push(@outputcopy, "if(result==0 && (rresult&2) && (translucent_flags&do_whiteout)) translucent_create_whiteout(local0);"); }
 
 # individual patches
-	if($funcname eq "symlink" || $funcname eq "link") {my $h=$inputcopy[1];$inputcopy[1]=$inputcopy[0];$inputcopy[0]=$h;$firststr=$laststr;$inputcopy[2]="";}
 	if($funcname eq "access") {$redirflags.="|(mode==2/*W_OK*/?LOOKUP_MKDIR|LOOKUP_CREATE:0)"}
 	if($funcname eq "mkdir") {$inputcopy[0].=" rresult=strlen(local0)-1;if(local0[rresult]=='/'){local0[rresult]=0;}";}
+        if($funcname eq "link") {$redirflags="0"}
+        if($funcname eq "rename") {$redirflags=~s/\|LOOKUP_CREATES//}
+        if($funcname eq "unlink") {$redirflags.="|LOOKUP_TRUNCATE";}
 
 	my $paramnames=join(", ", @paramnames);
 	my $localdefs=join("\n",@localdefs); #"char local0[REDIR_BUFSIZE+1];";
