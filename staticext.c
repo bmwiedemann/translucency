@@ -71,25 +71,29 @@ int a(unsigned int fd, struct c *dirp, unsigned int count)\
 redirecting_sys_getdentsxx(redirecting_sys_getdents,orig_sys_getdents,dirent)
 redirecting_sys_getdentsxx(redirecting_sys_getdents64,orig_sys_getdents64,dirent64)
 
+// returning 0 means executing *filename is OK... otherwise it is the final exec return value
 int redirecting_execve_test(char **filename) {
 	char local0[REDIR_BUFSIZE];
+	int (*access)(const char *pathname, int mode)=sys_call_table[__NR_access];
+	char * (*brk)(void *)=sys_call_table[__NR_brk];
+	char *ret=0, *endaddr, *newendaddr;
+	int result;
 	if(strncpy_from_user(local0, *filename, REDIR_BUFSIZE)<0) return -EFAULT;
-	if(redirect0(local0)) {
-		int (*access)(const char *pathname, int mode)=sys_call_table[__NR_access];
-		int result;
-//		printk("execve-redir: %s\n",local0);
+	if(!redirect0(local0)) return 0;
+//	printk(KERN_INFO SYSLOGID ": execve %s %s\n",current->comm, local0);
+	if(strcmp(current->comm, "keventd")) {	// keventd execs "/sbin/hotplug" -> brk oopses
+		endaddr=brk(0);
+		newendaddr=endaddr+strlen(local0)+1;
 		BEGIN_KMEM
 			result=access(local0,1);
 		END_KMEM
-		if(result==0) {
-			char * (*brk)(void *)=sys_call_table[__NR_brk];
-			char *endaddr=brk(0),*newendaddr=endaddr+strlen(local0)+1;
-			if(brk(newendaddr)<newendaddr) return 0;
-			*filename=endaddr;
-// this line alone happened to work on 95% of all exec's, but those other 4 make it more reliable
-			if(copy_to_user(*filename,local0,strlen(local0)+1)) return -EFAULT;
-		}
+		if(result) return 0;
+		if(!brk || IS_ERR(brk) || (ret=brk(newendaddr))<newendaddr || IS_ERR(ret))
+			return 0;
+		*filename=endaddr;
 	}
+// this line alone happened to work on 95% of all execs, but the previous ones make it more reliable
+	if(copy_to_user(*filename,local0,strlen(local0)+1)) return -EFAULT;
 	return 0;
 }
 

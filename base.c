@@ -279,6 +279,7 @@ int redirect_path_walk(char *name, char **endp,
 	// return index of uppermost layer with valid entry
 	for(j=i-1; j>=0; --j) if(valid[j]) path_release(&n[j]); //valid[j]=0; }
 	if (endp) *endp=(slash?lastnp:NULL);
+	if(!something_redirected && i>=0) {path_release(&n[i]); return (-1);}
 	return (i);
 }
 
@@ -293,6 +294,8 @@ int redirect_path(char *fname, struct translucent *t, int rflags)
 	int i,error=1,result=0,top=-1;
 	struct nameidata n[MAX_LAYERS];
 	if ((translucent_flags & no_translucency) || !match_uids()) return 0;
+	if ((translucent_flags & do_downcase)) for (i=strlen(fname)-1; i>=0; --i) 
+		if (fname[i]>='A' && fname[i]<='Z') fname[i]|=32;
 	if (t == NULL) {
 		for (i=0; i<REDIRS; ++i) {
 			if (is_valid(&redirs[i])) {
