@@ -36,11 +36,13 @@
 #define LOOKUP_MKDIR	0x80000000
 #define LOOKUP_CREATE	0x40000000
 #define LOOKUP_NODIR	0x20000000
+#define LOOKUP_NOSPECIAL	0x20000000
 
 //4000 here is too much
 #define REDIR_BUFSIZE 1023
 #define dflags 0
 #define ANYUID -1
+#define SYSLOGID "translucency"
 
 struct translucent {
 #define valid_translucency  (0x77abc713)

@@ -89,7 +89,7 @@ int mycopy(struct nameidata *nd, struct nameidata *nnew) {
 int mymkdir(struct nameidata *nd, struct nameidata *n, int mode, struct translucent *t) {
 	char *p,buf[REDIR_BUFSIZE+1];
 	int result;
-	if (no_copyonwrite) return -1;
+	if ((translucent_flags&no_copyonwrite)) return -1;
 	mode &= 07777;
 	p = namei_to_path(nd, buf);
 	memmove(buf,p,strlen(p)+1);
@@ -188,7 +188,7 @@ int redirect_path_walk(char *name, char **endp,
 				error2 = 0;
 			if (!error2 && !have_inode(nd)) {
 //if(valid1 && slash && (lflags&LOOKUP_MKDIR) && mymkdir2(nori,nd)==0);else 
-				if (valid1 && !slash && (lflags & LOOKUP_CREATE) && !no_copyonwrite) {
+				if (valid1 && !slash && (lflags & LOOKUP_CREATE) && !(translucent_flags&no_copyonwrite)) {
 					if (mycopy(nori,nd) == -ENODEV) { 
 						path_release(nd);
 						error2 = -1;
@@ -226,7 +226,7 @@ int redirect_path_walk(char *name, char **endp,
 		np=slash;
 	}
 	if(valid1 && (!valid2 || !have_inode(nd))) {
-		if(is_special(nori)) {
+		if((lflags&LOOKUP_NOSPECIAL) && is_special(nori)) {
 			path_release(nori); valid1=0;
 			if(valid2) { path_release(nd); valid2=0; }
 		} // else TODO: better place for copyonwrite here?
@@ -257,7 +257,7 @@ int redirect_path(char *fname, struct translucent *t, const struct nameidata *n1
 	char buf[REDIR_BUFSIZE+1],*p,*p2;
 	int i,l,error=1,result=0;
 	struct nameidata n,nori;
-	if (translucent_flags & no_translucency || !match_uids()) return 0;
+	if ((translucent_flags & no_translucency) || !match_uids()) return 0;
 	if (t == NULL) {
 		for (i=0; i<8; i++) {
 			if (redirs[i].valid == valid_translucency) {
@@ -309,10 +309,10 @@ static int init_translucent(struct translucent *t)
 	if (sscanf(t->b, "%s -> %s", t->from, t->to) != 2) {
 		if (t->b[0] == 0 || isspace(t->b[0])) {
 			// already cleaned? yes! -- cleanup_translucent(t);
-			printk(KERN_INFO "translucent (%d) mapping removed\n", (int)t->index);
+			printk(KERN_INFO SYSLOGID ": mapping %d removed\n", (int)t->index);
 			return 0;
 		} else {
-			printk(KERN_ERR "translucent (%d) bad mapping `%s'\n", (int)t->index, t->b);
+			printk(KERN_ERR SYSLOGID ": bad mapping %d `%s'\n", (int)t->index, t->b);
 			return -ENOENT;
 		}
 	}
@@ -335,7 +335,7 @@ static int init_translucent(struct translucent *t)
 	if (is_subdir(t->n2.dentry, t->n1.dentry))
 		t->flags |= to_is_subdir;
 
-	printk(KERN_INFO "translucent (%d) mapping %s -> %s\n", (int)t->index, t->from, t->to);
+	printk(KERN_INFO SYSLOGID ": mapping %d established %s -> %s\n", (int)t->index, t->from, t->to);
 	t->valid = valid_translucency;
 	MOD_INC_USE_COUNT; translucent_cnt++;
 	return 0;
@@ -352,7 +352,7 @@ static int redir_handler(ctl_table *table, int write, struct file *filp, void *b
 		cleanup_translucent(&redirs[num]);
 		error = init_translucent(&redirs[num]);
 		if (error) { 
-			printk(KERN_ERR "translucency: could not setup %s\n",(char *)table->data);
+			printk(KERN_ERR SYSLOGID ": could not setup %s\n",(char *)table->data);
 			strncpy(table->data, backup, REDIR_BUFSIZE);
 			error = init_translucent(&redirs[num]);
 		}
