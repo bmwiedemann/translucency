@@ -36,7 +36,7 @@ CFLAGS += -D__SMP__ -DSMP
 endif
 endif
 
-CFLAGS += -nostdinc $(KERNELINCLUDE) $(INCLUDE) -I. 
+CFLAGS += $(KERNELINCLUDE) $(INCLUDE)
 
 all: $M.o
 $M.o: $O

@@ -14,6 +14,7 @@
 #define MAKING_MODULES 1
 
 
+#include <stdarg.h>
 #include <linux/types.h>
 #include <asm/current.h>
 #include <asm/uaccess.h>
