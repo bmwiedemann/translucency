@@ -88,23 +88,25 @@ extern struct ctl_table redirection_table[];
 #define END_KMEM   set_fs(old_fs);}
 
 //#define DEBUG
-#define OUR_DEBUG_DOMAIN 0
-#define OUR_DEBUG_LEVEL  0
 
 #define OUR_DEBUG_MERGE		0x40000000
 #define OUR_DEBUG_REDIR		0x20000000
+#define OUR_DEBUG_TRACE		0x10000000
 #define OUR_DEBUG_ALL		0xffffff00
 
+#define OUR_DEBUG_DOMAIN 0
+#define OUR_DEBUG_LEVEL  0
+
 #ifdef DEBUG
-#define DPRINTK(x...) (printk(KERN_INFO SYSLOGID ": " __FILE__ ":%i:" \
-                       __FUNCTION__ "() ", __LINE__) , \
-                       printk(##x),printk("\n"))
+#define DPRINTK(x...) (printk(KERN_INFO SYSLOGID ": " __FILE__ ":%i:%s() ", \
+                       __LINE__, __FUNCTION__) , \
+                       printk(x),printk("\n"))
 
 /// debug output with level checking
 #define DPRINTKL(n,x...) if((((n)&0xff)<=OUR_DEBUG_LEVEL) && ((OUR_DEBUG_DOMAIN)&(n))) {\
-                      (printk(KERN_INFO __FILE__ ":%i:" \
-                       __FUNCTION__ "() ", __LINE__) , \
-                       printk(##x),printk("\n")); }
+                      (printk(KERN_INFO SYSLOGID ": " __FILE__ ":%i:%s() ", \
+                       __LINE__, __FUNCTION__) , \
+                       printk(x),printk("\n")); }
 #else
 #define DPRINTK(x...)
 #define DPRINTKL(n,x...)
