@@ -146,7 +146,7 @@ foreach(@lines) {
 		push(@inputcopy, "if($lastresult&4) BEGIN_KMEM orig_sys_unlink($laststr); END_KMEM");
 		push(@outputcopy, "if(result<0 && $lastresult&4) translucent_create_whiteout($laststr);"); 
 	}
-	if($creation&2) { push(@outputcopy, "if(result==0 && (rresult&2) && (translucent_flags&do_whiteout)) translucent_create_whiteout(local0);"); }
+	if($creation&2) { push(@outputcopy, "if(result==0 && (rresult&2) && !(translucent_flags&no_whiteout)) translucent_create_whiteout(local0);"); }
 
 # individual patches
 	if($funcname eq "access") {$redirflags.="|(mode==2/*W_OK*/?LOOKUP_MKDIR|LOOKUP_CREATE:0)"}

@@ -79,7 +79,7 @@ extern int translucent_flags;
 #define no_copyonwrite      (1<<1)
 #define no_getdents         (1<<2)
 #define do_downcase         (1<<3)
-#define do_whiteout         (1<<4)
+#define no_whiteout         (1<<4)
 
 extern struct ctl_table_header *redirection_table_header;
 extern struct ctl_table redirection_table[];
