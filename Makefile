@@ -6,10 +6,10 @@ KERNELDIR_UM=/usr/src/linux-2.4.18-um27
 
 include $(KERNELDIR)/.config
 # compiler options common to all platforms
-CFLAGS=-O2 -Wall -Werror
+CFLAGS=-O2 -Wall -Werror -fno-strict-aliasing
 ifdef CONFIG_ALPHA
 CFLAGS+=-Wstrict-prototypes -Wno-trigraphs \
-       -fno-strict-aliasing -fno-common -fomit-frame-pointer -pipe \
+       -fno-common -fomit-frame-pointer -pipe \
        -mno-fp-regs -ffixed-8 -mcpu=pca56 -Wa,-mev6 
 endif
 ifdef CONFIG_X86

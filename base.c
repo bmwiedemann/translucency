@@ -23,8 +23,8 @@ int translucent_cnt   = 0;
 static inline int match_uids(void)
 {
    struct task_struct *p = current;
-   return (( translucent_uid == ANYUID || translucent_uid == p->euid) &&
-	   ( translucent_gid == ANYUID || translucent_gid == p->egid));
+   return (( translucent_uid == ANYUID || (unsigned)translucent_uid == p->euid) &&
+	   ( translucent_gid == ANYUID || (unsigned)translucent_gid == p->egid));
 }
 
 static inline int match_fs(const struct nameidata *n, const struct translucent *t)
@@ -40,7 +40,7 @@ static inline int match_fs(const struct nameidata *n, const struct translucent *
 	if(!t->n[0].dentry->d_inode) {printk("DEBUG2b");return 0;}
 	if(!t->n[0].dentry->d_inode->i_sb) {printk("DEBUG3b");return 0;}
 	magic=n->dentry->d_inode->i_sb->s_magic;
-	if(magic==t->n[0].dentry->d_inode->i_sb->s_magic ||
+	if((unsigned)magic==t->n[0].dentry->d_inode->i_sb->s_magic ||
 		(translucent_fs>0 && magic==translucent_fs) ||
 		(translucent_fs<0 && magic!=-translucent_fs)) return 1;
 	return 0;
@@ -452,16 +452,16 @@ static int proc_doint_ro(ctl_table *table, int write, struct file *filp,
 }
 
 struct ctl_table redirection_dir_table[REDIRS+CTL_TABLE_STATIC] = {
-	{CTL_TABLE_BASE+1, "uid",   &translucent_uid,   sizeof(translucent_uid),   0644, NULL, &proc_dointvec},
-	{CTL_TABLE_BASE+2, "gid",   &translucent_gid,   sizeof(translucent_gid),   0644, NULL, &proc_dointvec},
-	{CTL_TABLE_BASE+3, "flags", &translucent_flags, sizeof(translucent_flags), 0644, NULL, &proc_dointvec},
-	{CTL_TABLE_BASE+6, "fs",    &translucent_fs,    sizeof(translucent_fs),    0644, NULL, &proc_dointvec},
-	{CTL_TABLE_BASE+4, "used",  &translucent_cnt,   sizeof(translucent_cnt),   0444, NULL, &proc_doint_ro},
-	{CTL_TABLE_BASE+5, "delimiter", &translucent_delimiter, sizeof(translucent_flags), 0644, NULL, &proc_dostring},
+	{CTL_TABLE_BASE+1, "uid",   &translucent_uid,   sizeof(translucent_uid),   0644, NULL, &proc_dointvec, NULL, NULL, NULL, NULL},
+	{CTL_TABLE_BASE+2, "gid",   &translucent_gid,   sizeof(translucent_gid),   0644, NULL, &proc_dointvec, NULL, NULL, NULL, NULL},
+	{CTL_TABLE_BASE+3, "flags", &translucent_flags, sizeof(translucent_flags), 0644, NULL, &proc_dointvec, NULL, NULL, NULL, NULL},
+	{CTL_TABLE_BASE+6, "fs",    &translucent_fs,    sizeof(translucent_fs),    0644, NULL, &proc_dointvec, NULL, NULL, NULL, NULL},
+	{CTL_TABLE_BASE+4, "used",  &translucent_cnt,   sizeof(translucent_cnt),   0444, NULL, &proc_doint_ro, NULL, NULL, NULL, NULL},
+	{CTL_TABLE_BASE+5, "delimiter", &translucent_delimiter, sizeof(translucent_flags), 0644, NULL, &proc_dostring, NULL, NULL, NULL, NULL},
 };
 struct ctl_table_header *redirection_table_header;
 struct ctl_table redirection_table[] = {
-	{CTL_TABLE_BASE, "translucency", NULL, 0, 0555, redirection_dir_table},
+	{CTL_TABLE_BASE, "translucency", NULL, 0, 0555, redirection_dir_table, NULL, NULL, NULL, NULL, NULL},
 	{0}
 };
 

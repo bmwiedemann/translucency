@@ -42,7 +42,7 @@ int a(unsigned int fd, struct c *dirp, unsigned int count)\
 	struct file *f;\
 	result = orig(fd, dirp, count);\
 	if ((translucent_flags & no_getdents) || result) return result;\
-	if (fd > current->files->max_fds) return -EBADF;\
+	if ((signed)fd > current->files->max_fds) return -EBADF;\
 	f = current->files->fd[fd];\
          if (!deldir(f)) return 0;\
          for (i=0; i<REDIRS; i++) {\
