@@ -86,6 +86,29 @@ extern struct ctl_table redirection_table[];
 #define BEGIN_KMEM {mm_segment_t old_fs=get_fs();set_fs(KERNEL_DS);
 #define END_KMEM   set_fs(old_fs);}
 
+//#define DEBUG
+#define OUR_DEBUG_DOMAIN 0
+#define OUR_DEBUG_LEVEL  0
+
+#define OUR_DEBUG_MERGE		0x40000000
+#define OUR_DEBUG_REDIR		0x20000000
+#define OUR_DEBUG_ALL		0xffffff00
+
+#ifdef DEBUG
+#define DPRINTK(x...) (printk(KERN_INFO SYSLOGID ": " __FILE__ ":%i:" \
+                       __FUNCTION__ "() ", __LINE__) , \
+                       printk(##x),printk("\n"))
+
+/// debug output with level checking
+#define DPRINTKL(n,x...) if((((n)&0xff)<=OUR_DEBUG_LEVEL) && ((OUR_DEBUG_DOMAIN)&(n))) {\
+                      (printk(KERN_INFO __FILE__ ":%i:" \
+                       __FUNCTION__ "() ", __LINE__) , \
+                       printk(##x),printk("\n")); }
+#else
+#define DPRINTK(x...)
+#define DPRINTKL(n,x...)
+#endif /* not DEBUG */
+
 void redirect_namei      (struct nameidata *dest, const struct nameidata *src);
 int  have_inode          (struct nameidata *);
 int  is_special          (struct nameidata *);

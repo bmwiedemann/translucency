@@ -10,6 +10,11 @@
  * ----------------------------------------------------------------------- */
 
 #include "base.h"
+#include "linked_list.h"
+
+#define LAYERS 8
+#define HASH_BITS 8
+#define HASH_TABLE_SIZE (1<<HASH_BITS)
 
 /* There are up to REDIRS redirections possible */
 struct translucent redirs[REDIRS];
@@ -73,6 +78,17 @@ inline int is_special(struct nameidata *n) {
 static inline int translucent_is_whiteout(struct nameidata *n) {
   return n && have_inode(n) && n->dentry->d_inode->i_size==0 &&
 	((n->dentry->d_inode->i_mode&(S_IALLUGO|S_IFMT))==(S_IFREG|01001));
+}
+
+static inline int translucent_is_whiteout2(char *path) {
+        int i_Ret;
+        struct nameidata n;
+        path_init(path, 0, &n);
+        i_Ret=path_walk(path, &n);
+        if(i_Ret) return 0;
+        i_Ret=translucent_is_whiteout(&n);
+        path_release(&n);
+        return i_Ret;
 }
 
 int translucent_create_whiteout(char *file) {
@@ -155,6 +171,144 @@ static inline int mymkdir2(struct nameidata *nd, struct nameidata *n, struct tra
 	return translucent_mkdir(nd,n,nd->dentry->d_inode->i_mode,t);
 }
 
+/** calculate hash from key data
+  @param unsigned char *key zero terminated input data
+  @return int hash value in range [0,HASH_TABLE_SIZE-1]
+*/
+static inline int hash_func(unsigned char *key)
+{
+        unsigned int hash=0;
+        if(!key) return 0;
+        while(*key){
+                hash<<=2;
+                hash+=*key;
+                ++key;
+        }
+        hash=(hash^(hash>>HASH_BITS)^(hash>>(HASH_BITS*2)))%HASH_TABLE_SIZE;
+//        printf("%i\n", hash);
+        return hash;
+}
+
+static inline int translucent_getdents(unsigned int fd, struct dirent64 *dirp, unsigned int count)
+{
+        int i_Ret;
+        BEGIN_KMEM
+                i_Ret=orig_sys_getdents64(fd, dirp, count);
+        END_KMEM
+        return i_Ret;
+}
+
+// declare large structures in data segment
+linked_list_t *hashtable[HASH_TABLE_SIZE];
+struct dirent64 dirents[1];
+char buf[REDIR_BUFSIZE], s_File[REDIR_BUFSIZE];
+int translucent_merge_init(int i_Layers, struct nameidata *n)
+{
+        int (*sys_close)(int)=sys_call_table[__NR_close];
+        off_t (*sys_lseek)(int fildes, off_t offset, int whence)=sys_call_table[__NR_lseek];
+        ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[__NR_write];
+        int out, i, i_Len, i_Hash, i_Bytes, b_Found, b_Whiteout;
+        linked_list_t **p_CurList, *p_Cur;
+        void *p_Data;
+	struct dirent64 *cur, *cur2;
+        int outfd, curdirfd, i_Valid=0, i_Layer;
+//        char buf[REDIR_BUFSIZE], s_File[REDIR_BUFSIZE];
+	char *p=NULL, *ps;
+//        printk(SYSLOGID ": mi0\n");
+        for(i_Layer=0; i_Layer<i_Layers; ++i_Layer) {
+                if(n[i_Layer].dentry==NULL) continue;
+                i_Valid++;
+        }
+        if(i_Valid<=1 && n[0].dentry) {
+                printk(SYSLOGID ": debugmi1\n");
+                return 26;
+        }
+        for(i_Layer=0; i_Layer<i_Layers; i_Layer++) {
+                if(n[i_Layer].dentry==NULL) {
+                        continue;
+                }
+                p=namei_to_path(&n[i_Layer],buf);
+                path_release(&n[i_Layer]);
+                DPRINTK("opening directory %s", p);
+                BEGIN_KMEM
+                        curdirfd=orig_sys_open(p, O_RDONLY|O_DIRECTORY, 0666);
+                END_KMEM
+                DPRINTK("fd %i", curdirfd);
+                if(curdirfd<0) {
+                        printk(SYSLOGID ": opening input failed\n");
+                        continue;
+                }
+                while((out=translucent_getdents(curdirfd, dirents, sizeof(dirents)))) {
+                        if(out<0) {
+                                printk(SYSLOGID ": exception 1 %i\n", out);
+                        }
+		        cur=dirents;
+		        while((char *)cur-(char *)dirents < out) {
+                                i_Len=cur->d_reclen;
+        //			printf("%8X %.8X %3i %11s \n",
+        //        	        cur->d_ino, cur->d_off, cur->d_reclen, cur->d_name);
+        //                      snprintf(s_File, sizeof(s_File), "%s/%s", path[i_Layer], cur->d_name);
+                                strcpy(s_File, p);
+                                strcat(s_File, "/");
+                                strcat(s_File, cur->d_name);
+        //                        printf("%s\n", s_File);
+                                b_Whiteout=translucent_is_whiteout2(s_File);
+                                i_Hash=hash_func(cur->d_name);
+                                b_Found=0;
+                                p_CurList=&(hashtable[i_Hash]);
+                                while((p_Cur=*p_CurList)) {
+                                        cur2=linked_list_get_data(p_Cur);
+                                        if(strcmp(cur2->d_name,cur->d_name)==0) {
+                                                if(b_Whiteout) {
+                                                        linked_list_remove(p_CurList);
+                                                }
+                                                b_Found=1;
+                                                break;
+                                        }
+                                        p_CurList=(linked_list_t**)&(p_Cur->next);
+                                }
+                                if(!b_Found && !b_Whiteout){
+                                    p_Data=vmalloc(i_Len);
+                                    memcpy(p_Data, cur, i_Len);
+                                    linked_list_insert(&(hashtable[i_Hash]), p_Data);
+                                  }
+			        cur=(struct dirent64 *)((char *)cur+i_Len);
+		        }
+                }
+
+                sys_close(curdirfd);
+        }
+        i_Bytes=0;
+        snprintf(s_File, sizeof(s_File), "/tmp/getdents-%i-", current->pid);
+	//TODO: add truly random component here
+        ps=p;
+        for(i=strlen(s_File); ps && *ps && (unsigned)i<sizeof(s_File)-1; ++i,++ps) {
+                s_File[i]=(*ps=='/')?'-':*ps; // append pathname with / substituted
+        }
+        s_File[i]=0;
+        BEGIN_KMEM
+                outfd=orig_sys_open(s_File, O_RDWR|O_CREAT|O_TRUNC, 0666);
+		if(outfd>=0) orig_sys_unlink(s_File);
+        END_KMEM
+	if(outfd<0) return outfd;
+        for(i=0; i<HASH_TABLE_SIZE; ++i) {
+            linked_list_foreach(p_Cur,hashtable[i]) {
+                cur=(struct dirent64*)linked_list_get_data(p_Cur);
+                //i_Len=cur->d_reclen; // space saving and a more human-readable file (strings /tmp/getdents...)
+		i_Len=sizeof(struct dirent64);
+                i_Bytes+=i_Len;
+                cur->d_off=i_Bytes;     // offset of next entry
+                BEGIN_KMEM
+                        sys_write(outfd, cur, i_Len);
+                END_KMEM
+                vfree(cur);
+            }
+            linked_list_finish(&hashtable[i]);
+        }
+        sys_lseek(outfd, 0, 0/*SEEK_SET*/);
+        return outfd;
+}
+
 void absolutize(char *name, struct dentry *d, struct vfsmount *m) {
 	char *p,buf[REDIR_BUFSIZE+1];
 	int l,l2 = strlen(name);
@@ -222,7 +376,8 @@ int redirect_path_walk(char *name, char **endp,
 	char savedchar=0,*slash=name,*np=name,*lastnp=NULL,something_redirected=0,valid[MAX_LAYERS];
 	int lflags=n->flags,error=0,i,j;
 	n->flags &= LOOKUP_TRANSLUCENCY_MASK;
-	memset(valid, 1, sizeof(valid));
+	memset(valid, 0, sizeof(valid));
+	for(i=0; i<t->layers; ++i) valid[1]=1;
 
 	while (np && any_valid(t->layers,valid)>=0) {
 		redirect_all_namei;
@@ -317,13 +472,15 @@ int redirect_path_walk(char *name, char **endp,
                 valid[i]=0;
                 i=any_valid(i,valid);
         }
-	// return dir in lowest layer to open(dir) call
+	// if topmost entry is a directory merge dirs
 	if(i>0 && (lflags&LOOKUP_NODIR)) {
-		for(j=0; j<=i; ++j) if(valid[j] && have_inode(&n[j]) && S_ISDIR(n[j].dentry->d_inode->i_mode)) break;
-		for(; i>j; --i) if(valid[i]) {
-			path_release(&n[i]);
-			valid[i]=0;
-		}
+                for(j=i-1; j>=0; --j) if(valid[j] && have_inode(&n[j])) {
+                        if(S_ISDIR(n[j].dentry->d_inode->i_mode)) {
+				for(i=0; i<MAX_LAYERS; ++i)
+			                if(!valid[i]) n[i].dentry=NULL; // mark invalid
+				return MAX_LAYERS;
+			} else break;
+                }
 	}
 	// return index of uppermost layer with valid entry
 	for(j=i-1; j>=0; --j) if(valid[j]) path_release(&n[j]); //valid[j]=0; }
@@ -360,6 +517,11 @@ int redirect_path(char *fname, struct translucent *t, int rflags)
 	}
 	error=top<0;
 	if (error) goto out_release;
+        if(top==MAX_LAYERS) { // special merge-dir handling
+                top=translucent_merge_init(MAX_LAYERS, n);
+		if(top<0) return top;
+                return (top+1)<<4;
+        }
 	p = d_path(n[top].dentry, n[top].mnt, fname, REDIR_BUFSIZE);
 	memmove(fname,p,strlen(p)+1);
 	result=1;

@@ -11,60 +11,47 @@
 
 #include "base.h"
 /* this file contains manually generated syscall-redirection functions
-
-   note: this data structure is only an sorry excuse of a dynamic thing:
-	 those add and del functions will have problems with SMP and anyway
-   TODO: have to be rewritten
 */
 
-#define maxdirs 16
-struct file *redirected_directories[maxdirs];
-int dircount=0;
-int adddir(struct file *newdir) {if(dircount>=maxdirs)return 1;redirected_directories[dircount++]=newdir;return 0;}
-int deldir(struct file *dir) {
-	int i;
-	for(i=0;i<dircount;++i) if(redirected_directories[i]==dir) {
-		if(i< --dircount)
-		memmove(redirected_directories[i],
-			redirected_directories[i+1],
-			sizeof(struct file *)*(dircount-i));
-		return 0;
-	}
-	return 1;
+static inline void convert_dirent64(struct dirent *out, const struct dirent64 *in)
+{
+	printk(SYSLOGID ": TODO convert_dirent64\n");
+	out->d_reclen=in->d_reclen;
+	out->d_off=in->d_off;
+	out->d_ino=in->d_ino;
+	//memcpy(out->d_name, in->d_name, NAME_MAX+1??);
 }
 
-//TODO: generalize merging getdents for layers>2
-#define redirecting_sys_getdentsxx(a,orig,c)\
-int a(unsigned int fd, struct c *dirp, unsigned int count)\
+#define redirecting_sys_getdentsxx(fname,orig,dtype)\
+int fname(unsigned int fd, struct dtype *dirp, unsigned int count)\
 {\
-	char buf[REDIR_BUFSIZE+1],*p;\
-	int result,i;\
-	struct file *f;\
+	int result, readresult;\
+	ssize_t (*sys_read)(int fd, void *buf, size_t count)=sys_call_table[__NR_read];\
 	result = orig(fd, dirp, count);\
-	if ((translucent_flags & no_getdents) || result) return result;\
-	if ((signed)fd > current->files->max_fds) return -EBADF;\
-	f = current->files->fd[fd];\
-         if (!deldir(f)) return 0;\
-         for (i=0; i<REDIRS; i++) {\
-             if (is_valid(&redirs[i]) && \
-  	         is_subdir(f->f_dentry, redirs[i].n[0].dentry) && \
-	         (!is_subdir(redirs[i].n[1].dentry, redirs[i].n[0].dentry) || \
-		  !is_subdir(f->f_dentry, redirs[i].n[1].dentry))) break;\
-         }\
-         if (i == REDIRS) return 0;\
-	p = d_path(f->f_dentry, f->f_vfsmnt, buf, REDIR_BUFSIZE); memmove(buf,p,strlen(p)+1);\
-	if (redirectt(&redirs[i], buf)==2) {\
-		int (*orig_sys_close)(int)=sys_call_table[__NR_close];\
-		BEGIN_KMEM\
-			result = orig_sys_open(buf, O_RDONLY, 0644);\
-		END_KMEM\
-		if(result<0) return 0;\
-		current->files->fd[fd] = current->files->fd[result];\
-		current->files->fd[result] = f;\
-		adddir(current->files->fd[fd]);\
-		orig_sys_close(result);\
-		result = orig(fd, dirp, count);\
+	if ((translucent_flags & no_getdents) || result>=0) return result;\
+	if (result==-ENOTDIR /* TODO: somehow check that it is our file*/) {\
+		struct dtype temp, *p=&temp;\
+		struct dirent64 inbuf, *in=&inbuf;\
+		char *out=(char *)dirp;\
+		\
+		/*printk(SYSLOGID ": getdents fd %i count %i\n", fd, count);*/\
+		count-=sizeof(struct dirent64);\
+		result=0;\
+		while((unsigned)result<=count) {\
+			BEGIN_KMEM\
+				readresult=sys_read(fd, in, sizeof(struct dirent64));\
+			END_KMEM\
+			if(readresult<0) return readresult;\
+			if(readresult==0) break;\
+			/*printk(SYSLOGID ": getdents %i %i %s\n", readresult, in->d_reclen, in->d_name);*/\
+			if(sizeof(struct dtype)!=sizeof(struct dirent64)) convert_dirent64((struct dirent*)p, in);\
+			else p=(struct dtype*) in;\
+			if(copy_to_user(out, p, p->d_reclen)) return -EFAULT;\
+			out+=p->d_reclen;\
+			result+=p->d_reclen;\
+		}\
 	}\
+	/*printk(SYSLOGID ": getdents return %i\n", result);*/\
 	return result;\
 }
 
@@ -142,6 +129,9 @@ int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 	if(strncpy_from_user(local0, pathname, REDIR_BUFSIZE)<0) return -EFAULT;
 	if((rresult=redirect2(local0, dflags | extraflags))>0) {
 		int result;
+                if(rresult>>4) {
+                        return (rresult>>4)-1;
+                }
 		BEGIN_KMEM
 			if(rresult&4) orig_sys_unlink(local0);
 			result = orig_sys_open(local0, redirflags, mode);
