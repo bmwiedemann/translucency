@@ -103,16 +103,22 @@ int redirecting_sys_execve(const char *filename, char *const argv [], char *cons
 }
 */
 
+#define fname "redirecting_sys_execve"
 __asm__(
-"\n"__ALIGN_STR"\n"
-SYMBOL_NAME_STR(redirecting_sys_execve) ":\n\t"
-"pushl %ebp\n\tmovl %esp,%ebp\n\t"
-"leal 8(%ebp),%eax\n\tpushl %eax\n\t"
-"call redirecting_execve_test\n\t"
-"movl %ebp,%esp\n\tpopl %ebp\n\t"
-"testl %eax,%eax\n\tjz execredirorig\n\tret\n"
-"execredirorig:\n\t"
-"jmpl *orig_sys_execve\n");
+"\n.globl " SYMBOL_NAME(fname) "\n "
+__ALIGN_STR"\n"
+" .type " fname ",@function\n"
+SYMBOL_NAME(fname) ":\n"
+" pushl %ebp\n movl %esp,%ebp\n"
+" leal 8(%ebp),%eax\n pushl %eax\n"
+" call redirecting_execve_test\n"
+" movl %ebp,%esp\n popl %ebp\n"
+" testl %eax,%eax\n jz .Lexecredirorig\n ret\n"
+".Lexecredirorig:\n"
+" jmpl *orig_sys_execve\n"
+".L" fname "_end:\n"
+" .size " fname ",.L" fname "_end-" fname "\n");
+#undef fname
 
 
 int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
@@ -127,7 +133,7 @@ int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 	if(strncpy_from_user(local0, pathname, REDIR_BUFSIZE)<0) return -EFAULT;
 	if((rresult=redirect_path(local0,0, dflags | extraflags))) {
 		int result;
-		if(rresult>1 && (extraflags&LOOKUP_MKDIR)) redirflags|=O_CREAT; //makes clever gnu cp work which omits O_CREAT flag if previous stat returned 0
+		if(rresult>1 && (extraflags&LOOKUP_MKDIR)) { if(!mode) mode=0100666; redirflags|=O_CREAT; } // this is dirty -> TODO: better do COW for that without copying content. makes clever gnu cp work which omits O_CREAT flag if previous stat returned 0
 		BEGIN_KMEM
 			result = orig_sys_open(local0, redirflags, mode);
 		END_KMEM
