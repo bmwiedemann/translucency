@@ -377,7 +377,7 @@ int redirect_path_walk(char *name, char **endp,
 	int lflags=n->flags,error=0,i,j;
 	n->flags &= LOOKUP_TRANSLUCENCY_MASK;
 	memset(valid, 0, sizeof(valid));
-	for(i=0; i<t->layers; ++i) valid[1]=1;
+	for(i=0; i<t->layers; ++i) valid[i]=1;
 
 	while (np && any_valid(t->layers,valid)>=0) {
 		redirect_all_namei;
