@@ -229,7 +229,7 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
         ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[__NR_write];
         int (*sys_fchmod)(int fildes, mode_t mode)=sys_call_table[__NR_fchmod];
         int out, i, i_Len, i_Hash, i_Bytes, b_Found, b_Whiteout;
-        int i_HashSize=HASH_TABLE_SIZE*sizeof(struct hash_data_t *);
+        int i_HashSize=HASH_TABLE_SIZE*sizeof(struct hash_data_t);
         struct hash_data_t *hashtable, *p_CurList, *p_Cur;
 	struct list_head *ListHead, *ListHead2;
 	struct dirent64 *cur, *cur2, *dirents;
@@ -294,7 +294,7 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
                                 i_Hash=hash_func(cur->d_name);
                                 b_Found=0;
                                 p_CurList=hashtable+i_Hash;
-				list_for_each_prev(ListHead, (&p_CurList->list)) {
+				list_for_each_safe(ListHead, ListHead2, (&p_CurList->list)) {
                                         p_Cur=list_entry(ListHead, struct hash_data_t, list);
 					cur2=&(p_Cur->data);
                                         if(strcmp(cur2->d_name,cur->d_name)==0) {
