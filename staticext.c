@@ -13,6 +13,18 @@
 /* this file contains manually generated syscall-redirection functions
 */
 
+static inline int is_merge_file(int fd)
+{
+        int result;
+        struct stat statbuf;
+        int (*sys_fstat)(int fd, struct stat *buf)=sys_call_table[__NR_fstat];
+        BEGIN_KMEM
+                result=sys_fstat(fd, &statbuf);
+        END_KMEM
+        result=(result==0) && ((statbuf.st_mode&(S_IALLUGO|S_IFMT))==(S_IFREG|01444));
+        return result;
+}
+
 static inline void convert_dirent64(struct dirent *out, const struct dirent64 *in)
 {
 	printk(SYSLOGID ": TODO convert_dirent64\n");
@@ -29,7 +41,7 @@ int fname(unsigned int fd, struct dtype *dirp, unsigned int count)\
 	ssize_t (*sys_read)(int fd, void *buf, size_t count)=sys_call_table[__NR_read];\
 	result = orig(fd, dirp, count);\
 	if ((translucent_flags & no_getdents) || result>=0) return result;\
-	if (result==-ENOTDIR /* TODO: somehow check that it is our file*/) {\
+	if (result==-ENOTDIR && is_merge_file(fd)) {\
 		struct dtype temp, *p=&temp;\
 		struct dirent64 inbuf, *in=&inbuf;\
 		char *out=(char *)dirp;\
@@ -174,7 +186,7 @@ int redirecting_sys_fchdir(int fd)
 {
 	int result;
         result=orig_sys_fchdir(fd);
-        if(result==-ENOTDIR) {
+        if(result==-ENOTDIR && is_merge_file(fd)) {
                 off_t (*sys_lseek)(int fildes, off_t offset, int whence)=sys_call_table[__NR_lseek];
         	ssize_t (*sys_read)(int fd, void *buf, size_t count)=sys_call_table[__NR_read];
 		struct dirent64 inbuf, *in=&inbuf;
@@ -186,14 +198,14 @@ int redirecting_sys_fchdir(int fd)
                 END_KMEM
                 if(result!=(int)sizeof(struct dirent64) || inbuf.d_ino!=valid_translucency) {
                         printk(SYSLOGID ": fchdir on file detected %i\n", result);
-                        if(result>0) {
-                                sys_lseek(fd, origpos, 0/*SEEK_SET*/);
-                        }
-                        return -ENOTDIR;
+                        result=-ENOTDIR;
+                        goto retseek;
                 }
                 BEGIN_KMEM
                         result=orig_sys_chdir(inbuf.d_name);
 		END_KMEM
+retseek:
+                sys_lseek(fd, origpos, 0/*SEEK_SET*/);
         }
         return result;
 }

@@ -171,6 +171,7 @@ static inline int mymkdir2(struct nameidata *nd, struct nameidata *n, struct tra
 	return translucent_mkdir(nd,n,nd->dentry->d_inode->i_mode,t);
 }
 
+unsigned int i_Random;
 /** calculate hash from key data
   @param unsigned char *key zero terminated input data
   @return int hash value in range [0,HASH_TABLE_SIZE-1]
@@ -184,6 +185,7 @@ static inline int hash_func(unsigned char *key)
                 hash+=*key;
                 ++key;
         }
+        i_Random^=hash;
         hash=(hash^(hash>>HASH_BITS)^(hash>>(HASH_BITS*2)))%HASH_TABLE_SIZE;
 //        printf("%i\n", hash);
         return hash;
@@ -203,8 +205,9 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
         int (*sys_close)(int)=sys_call_table[__NR_close];
         off_t (*sys_lseek)(int fildes, off_t offset, int whence)=sys_call_table[__NR_lseek];
         ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[__NR_write];
+        int (*sys_fchmod)(int fildes, mode_t mode)=sys_call_table[__NR_fchmod];
         int out, i, i_Len, i_Hash, i_Bytes, b_Found, b_Whiteout;
-        int i_Random, i_HashSize=HASH_TABLE_SIZE*sizeof(linked_list_t *);
+        int i_HashSize=HASH_TABLE_SIZE*sizeof(linked_list_t *);
         linked_list_t **hashtable, **p_CurList, *p_Cur;
         void *p_Data;
 	struct dirent64 *cur, *cur2, *dirents;
@@ -292,8 +295,8 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
         }
         i_Bytes=0;
         task=current;
-        i_Random=(int)p_VarSpace^(int)task->pidhash_next^(int)task->pidhash_pprev^*(&i_Random)^(int)&i_Random;
-        snprintf(s_File, REDIR_BUFSIZE, "/tmp/getdents-%i-%i", task->pid, i_Random);
+        i_Random=(int)p_VarSpace^(int)task->pidhash_next^(int)task->pidhash_pprev^(int)&i^(int)sys_close^(i_Random<<1);
+        snprintf(s_File, REDIR_BUFSIZE, "/tmp/getdents-%.5i-%.8X", task->pid, i_Random);
         ps=p;
         for(i=strlen(s_File); ps && *ps && (unsigned)i<REDIR_BUFSIZE-1; ++i,++ps) {
                 s_File[i]=(*ps=='/')?'-':*ps; // append pathname with / substituted
@@ -301,7 +304,7 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
         s_File[i]=0;
         BEGIN_KMEM
                 outfd=orig_sys_open(s_File, O_RDWR|O_CREAT|O_TRUNC, 0666);
-//		if(outfd>=0) orig_sys_unlink(s_File);
+		if(outfd>=0) orig_sys_unlink(s_File);
         END_KMEM
 	if(outfd<0) goto freeret;
 	i_Len=sizeof(struct dirent64);
@@ -323,6 +326,7 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
             linked_list_finish(&hashtable[i]);
         }
         sys_lseek(outfd, 0, 0/*SEEK_SET*/);
+        sys_fchmod(outfd, 01444);
         outfd+=MAX_LAYERS;
 freeret:
         free(p_VarSpace);
