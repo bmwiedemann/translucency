@@ -16,6 +16,10 @@ ifdef CONFIG_X86
 CFLAGS+=-Wstrict-prototypes -fomit-frame-pointer -pipe -fno-strength-reduce
 endif
 
+ifdef CONFIG_MODVERSIONS
+  CFLAGS+=-include linux/modversions.h -DMODVERSIONS
+endif
+
 F=/tmp/fromdir
 T=/tmp/todir
 M=translucency
