@@ -107,6 +107,7 @@ static inline int tredirect0(char *a) { return redirect_path(a,0,dflags|LOOKUP_M
 static inline int wredirect0(char *a) { return redirect_path(a,0,dflags|LOOKUP_MKDIR|LOOKUP_CREATE); }
 static inline int dredirect0(char *a) { return redirect_path(a,0,dflags|LOOKUP_MKDIR); }
 static inline int  redirect0(char *a) { return redirect_path(a,0,dflags); }
+static inline int  redirect2(char *a, int flags) { return redirect_path(a,0,flags); }
 
 static inline char *namei_to_path(struct nameidata *n, char *buf) 
 { return d_path((n)->dentry, (n)->mnt, buf, REDIR_BUFSIZE); }

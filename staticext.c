@@ -179,28 +179,6 @@ int redirecting_sys_chdir(const char *path)
 }
 #endif
 
-#if defined(__NR_symlink)
-int redirecting_sys_symlink(const char *oldpath, const char *newpath)
-{
-	char local0[REDIR_BUFSIZE];
-	char local1[REDIR_BUFSIZE];
-	int rresult;
-	if(strncpy_from_user(local1, newpath, REDIR_BUFSIZE)<0) return -EFAULT;
-	if((rresult=dredirect0(local1))>0) {
-		int result;
-		if(strncpy_from_user(local0, oldpath, REDIR_BUFSIZE)<0)return -EFAULT; //redirect(local0);
-//TODO: implement proper symlink handling		if(local0[0]!='/' && is_subdir(current->fs->pwd,n1.dentry) && rresult>1) absolutize(local0,current->fs->pwd, current->fs->pwdmnt);
-		BEGIN_KMEM
-			result = orig_sys_symlink(local0, local1);
-		END_KMEM
-		if(no_fallback(result)) return result;
-	}
-	if(rresult<0) return rresult;
-	return orig_sys_symlink(oldpath, newpath);
-}
-#endif
-
-
 #if defined(__NR_socketcall)
 #include <linux/un.h>
 /// catch bind+connect syscall for named AF_UNIX sockets - needed for syslog, gpm, nscd and resmgr

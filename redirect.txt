@@ -33,7 +33,7 @@ int rmdir(const char *pathname);
 ++int lchown32(const char *path, uid_t owner, gid_t group);
 :+int mknod(const char *pathname, mode_t mode, dev_t dev);
 :+int link(const char *oldpath, const char *newpath);
-:--+int symlink(const char *oldpath, const char *newpath);
+:+int symlink(const char *oldpath, const char *newpath);
 ++int utime(const char *filename, const struct utimbuf *buf);
 ++int utimes(const char *filename, const struct timeval *buf);
 #int statfs(const char *path, struct statfs *buf);

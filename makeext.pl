@@ -69,7 +69,7 @@ foreach(@lines) {
 	my $creation=0; while(s/^://g) {$creation++;}
 	my $headonly=0; while(s/^-//g) {$headonly++;}
 	my $redirtype=0; while(s/^\+//g) {$redirtype++;}
-	$redirtype=("","d","w")[$redirtype];
+	my $redirflags=("0","LOOKUP_MKDIR","LOOKUP_MKDIR|LOOKUP_CREATE")[$redirtype];
 	unless(/$funcre/) {next}
 	if($headonly>1) {next}
 	my $rettype=$1;
@@ -84,6 +84,7 @@ foreach(@lines) {
 	my $varcount=0;
 	my $xn;
 	my $laststr;
+	my $firststr;
 	foreach(@params) {
 	  /(\w+)$/;
 	  my $name=$1;push(@paramnames,$name);
@@ -99,6 +100,7 @@ foreach(@lines) {
 		if(/char/) {
 			$def.="[REDIR_BUFSIZE]";
 			$laststr=$n;
+			$firststr=$n unless defined $firststr;
 			if($input) {my $c=($varcount>=1 && $pn=~/path|file/)?" rresult=redirect0($n);":"";push(@inputcopy,"if(strncpy_from_user($n, $pn, REDIR_BUFSIZE)<0) return -EFAULT;$c")}
 			else {
 				$xn=$n."size";
@@ -129,7 +131,9 @@ foreach(@lines) {
 	  $varcount++;
 	}
 	if($creation&1) { push(@inputcopy, "if(rresult&4) BEGIN_KMEM orig_sys_unlink($laststr); END_KMEM"); push(@outputcopy, "if(result<0 && rresult&4) translucent_create_whiteout($laststr);"); }
-	if($creation&2) { $redirtype="t"; push(@outputcopy, "if(result==0 && (rresult&2) && (translucent_flags&do_whiteout)) translucent_create_whiteout(local0);"); }
+	if($creation&2) { $redirflags.="|LOOKUP_TRUNCATE"; push(@outputcopy, "if(result==0 && (rresult&2) && (translucent_flags&do_whiteout)) translucent_create_whiteout(local0);"); }
+	if($funcname eq "symlink") {my $h=$inputcopy[1];$inputcopy[1]=$inputcopy[0];$h=~s/rresult.*//;$inputcopy[0]=$h;$firststr=$laststr;}
+	if($funcname eq "access") {$redirflags.="|(mode==2/*W_OK*/?LOOKUP_MKDIR|LOOKUP_CREATE:0)"}
 	my $paramnames=join(", ", @paramnames);
 	my $localdefs=join("\n",@localdefs); #"char local0[REDIR_BUFSIZE+1];";
 	my $localparams=join(", ", @localparams);
@@ -140,7 +144,7 @@ $rettype redirecting_sys_$funcname($params)\n{\n\tint rresult;\n";
 	unless($headonly) {
 		print SOURCE "$localdefs
 	$inputcopy[0]
-	if((rresult=${redirtype}redirect0(local0))>0) {
+	if((rresult=redirect2($firststr, $redirflags))>0) {
 		$rettype result;$inputcopy
 		BEGIN_KMEM
 			result = orig_sys_$funcname($localparams);
