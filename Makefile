@@ -185,10 +185,15 @@ ktest: $M.o
 	echo "" > /proc/sys/translucency/0
 	rmmod $M
 
-testrun:
+cleantestfiles:
 	-rm -rf $F $T /tmp/linktest
-	make testfiles all > /dev/null
-	make test 2>&1 | diff -u testrun2.txt -
+testprep:
+	make cleantestfiles testfiles all > /dev/null
+testrun: testprep
+	make test 2>&1 | grep -v "ing directory" | diff -u testrun.txt -
+refrun: testprep
+	make test 2>&1 | grep -v "ing directory" > testrun.txt
+
 clean:
 	-rm -f *.o *.rej *.[ch].orig 
 distclean: mrproper
