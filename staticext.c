@@ -33,27 +33,30 @@ int deldir(struct file *dir) {
 	return 1;
 }
 
-#define redirecting_sys_getdentsxx(a,b,c)\
+#define redirecting_sys_getdentsxx(a,orig,c)\
 int a(unsigned int fd, struct c *dirp, unsigned int count)\
 {\
-	char buf[ps+16],*p;\
-	struct file *f=current->files->fd[fd];	/*TODO: boundary checks*/\
-	int result = b(fd, dirp, count);\
-	if(no_getdents || result)return result;\
+	char buf[ps+1],*p;\
+	int result;\
+	struct file *f;\
+	result = orig(fd, dirp, count);\
+	if(no_getdents || result) return result;\
+	if(fd>current->files->max_fds) return -EBADF;\
+	f=current->files->fd[fd];\
 	if(!deldir(f) || !is_subdir(f->f_dentry, n1.dentry) || \
 	  (to_is_subdir && is_subdir(f->f_dentry, n2.dentry))) return 0;\
-	p=d_path(f->f_dentry, f->f_vfsmnt, buf, ps);\
-	if(redirect(p)) {\
+	p=d_path(f->f_dentry, f->f_vfsmnt, buf, ps); memmove(buf,p,strlen(p)+1);\
+	if(redirect(buf)) {\
 		int (*orig_sys_close)(int)=sys_call_table[SYS_close];\
 		BEGIN_KMEM \
-			result = orig_sys_open(p, O_RDONLY, 0644);\
+			result = orig_sys_open(buf, O_RDONLY, 0644);\
 		END_KMEM\
 		if(result<0) return 0;\
 		current->files->fd[fd] = current->files->fd[result];\
 		current->files->fd[result] = f;\
 		adddir(current->files->fd[fd]);\
 		orig_sys_close(result);\
-		result = b(fd, dirp, count);\
+		result = orig(fd, dirp, count);\
 	}\
 	return result;\
 }
