@@ -8,6 +8,7 @@
 # :  syscall creates file
 # :: syscall removes file
 # ::: both above
+# ^  do not follow symlinks
 
 :--int open(const char *pathname, int oflags, mode_t mode);
 :--+int creat(const char *pathname, mode_t mode);
@@ -15,38 +16,38 @@
 ++int truncate64(const char *path, loff_t length);
 
 int stat(const char *file_name, struct stat *buf);
-int lstat(const char *file_name, struct stat *buf);
+^int lstat(const char *file_name, struct stat *buf);
 int stat64(const char *file_name, struct stat64 *buf);
-int lstat64(const char *file_name, struct stat64 *buf);
+^int lstat64(const char *file_name, struct stat64 *buf);
 int access(const char *pathname, int mode);
-int readlink(const char *path, char *buf, size_t bufsiz);
+^int readlink(const char *path, char *buf, size_t bufsiz);
 
-:::++int rename(const char *oldpath, const char *newpath);
-::++int unlink(const char *pathname);
+^:::++int rename(const char *oldpath, const char *newpath);
+^::++int unlink(const char *pathname);
 :+int mknod(const char *pathname, mode_t mode, dev_t dev);
-:+int link(const char *oldpath, const char *newpath);
-:+int symlink(const char *oldpath, const char *newpath);
+^:+int link(const char *oldpath, const char *newpath);
+^:+int symlink(const char *oldpath, const char *newpath);
 :+int mkdir(const char *pathname, mode_t mode);
 --int chdir(const char *path);
 --int fchdir(int fd);
-int rmdir(const char *pathname);
+::int rmdir(const char *pathname);
 ++int chmod(const char *path, mode_t mode);
 ++int chown(const char *path, uid_t owner, gid_t group);
-++int lchown(const char *path, uid_t owner, gid_t group);
+^++int lchown(const char *path, uid_t owner, gid_t group);
 ++int chown32(const char *path, uid_t owner, gid_t group);
-++int lchown32(const char *path, uid_t owner, gid_t group);
+^++int lchown32(const char *path, uid_t owner, gid_t group);
 ++int utime(const char *filename, const struct utimbuf *buf);
 ++int utimes(const char *filename, const struct timeval *buf);
 #int statfs(const char *path, struct statfs *buf);
 #int acct(const char *filename);
 ++int setxattr (const char *path, const char *name, const void *value, size_t size, int flags);
-++int lsetxattr (const char *path, const char *name, const void *value, size_t size, int flags);
+^++int lsetxattr (const char *path, const char *name, const void *value, size_t size, int flags);
 ssize_t getxattr (const char *path, const char *name, void *value, size_t size);
-ssize_t lgetxattr (const char *path, const char *name, void *value, size_t size);
+^ssize_t lgetxattr (const char *path, const char *name, void *value, size_t size);
 ssize_t listxattr (const char *path, char *list, size_t size);
-ssize_t llistxattr (const char *path, char *list, size_t size);
+^ssize_t llistxattr (const char *path, char *list, size_t size);
 int removexattr (const char *path, const char *name);
-int lremovexattr (const char *path, const char *name);
+^int lremovexattr (const char *path, const char *name);
 
 int swapon(const char *path, int swapflags);
 int swapoff(const char *path);

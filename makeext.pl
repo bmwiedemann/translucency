@@ -66,6 +66,7 @@ print SOURCE "}\n\n";
 
 foreach(@lines) {
 	if(m"^\s*$") {next}
+        my $symfollow=0; while(s/^\^//g) {$symfollow++;}
 	my $creation=0; while(s/^://g) {$creation++;}
 	my $headonly=0; while(s/^-//g) {$headonly++;}
 	my $redirtype=0; while(s/^\+//g) {$redirtype++;}
@@ -88,6 +89,7 @@ foreach(@lines) {
 	my $laststr;
 	my $firststr;
         if($creation&1) { $redirflags.="|LOOKUP_CREATES" }
+        if($symfollow&1) { $redirflags.="|LOOKUP_NOFOLLOW" }
 	foreach(@params) {
 	  /(\w+)$/;
 	  my $name=$1;push(@paramnames,$name);
