@@ -136,7 +136,7 @@ int translucent_mkdir(struct nameidata *nd, struct nameidata *n, int mode, struc
 	p = namei_to_path(nd, buf);
 	memmove(buf,p,strlen(p)+1);
 //	printk(KERN_DEBUG SYSLOGID ": mkdir %s %.4o\n",buf,mode);
-	if(redirectt(t,buf)) {
+	if(redirect_path(buf,t,dflags|LOOKUP_CREATES)) {
 		current->fs->umask = 0;
 		BEGIN_KMEM
 			result=orig_sys_mkdir(buf,mode);
@@ -199,10 +199,6 @@ int redirect_path_init(char *name, unsigned int flags,
 			np=name;
 			haddotdot=1;
 		}
-	}
-	if (haddotdot) {
-		//TODO: is that "reverse redirection" needed? redirect_path (name,t,n2,n1,dflags);
-		//printk(KERN_INFO "now having %s\n",name);
 	}
 	return 1;
 }
@@ -314,6 +310,13 @@ int redirect_path_walk(char *name, char **endp,
 		valid[i]=0;
 		i=any_valid(i,valid);
 	}
+        // free non-existing entries when !CREATES
+        i=any_valid(t->layers,valid);
+        while ((!(lflags&LOOKUP_CREATES)) && i>0 && !have_inode(&n[i])) {
+                path_release(&n[i]);
+                valid[i]=0;
+                i=any_valid(i,valid);
+        }
 	// return dir in lowest layer to open(dir) call
 	if(i>0 && (lflags&LOOKUP_NODIR)) {
 		for(j=0; j<=i; ++j) if(valid[j] && have_inode(&n[j]) && S_ISDIR(n[j].dentry->d_inode->i_mode)) break;
