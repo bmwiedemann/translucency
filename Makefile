@@ -1,4 +1,5 @@
-D=translucency-0.6.0-mips-port
+M=translucency
+D=$M
 ifneq ($(KERNELRELEASE),)
 
 obj-m := translucency.o
