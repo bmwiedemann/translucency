@@ -97,16 +97,7 @@ int redirecting_execve_test(char **filename) {
 	return 0;
 }
 
-/* did some strange addl $-12,%esp
-that asm should work on all i386 compatible platforms 
-int redirecting_sys_execve(const char *filename, char *const argv [], char *const envp[])
-{
-	int result;
-	if((result=redirecting_execve_test(&filename))) return result;
-	goto *orig_sys_execve;
-}
-*/
-
+#if defined(__i386__)
 #define fname "redirecting_sys_execve"
 __asm__(
 "\n.globl " SYMBOL_NAME(fname) "\n "
@@ -124,7 +115,20 @@ SYMBOL_NAME(fname) ":\n"
 " .size " fname ",.L" fname "_end-" fname "\n");
 #undef fname
 
+#else
+/* did some strange addl $-12,%esp
+   but it is important to leave stack untouched
+   that asm should work on all i386 compatible platforms
+int redirecting_sys_execve(char *filename, char *const argv [], char *const envp[])
+{
+	int result;
+	if((result=redirecting_execve_test(&filename))) return result;
+	goto *orig_sys_execve;
+}
+*/
+#endif
 
+#if defined(__NR_open)
 int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 {
 	char local0[REDIR_BUFSIZE];
@@ -144,7 +148,9 @@ int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 	}
 	return orig_sys_open(pathname, oflags, mode);
 }
+#endif
 
+#if defined(__NR_chdir)
 int redirecting_sys_chdir(const char *path)
 {
 	char local0[REDIR_BUFSIZE];
@@ -158,7 +164,9 @@ int redirecting_sys_chdir(const char *path)
 	}
 	return result;
 }
+#endif
 
+#if defined(__NR_symlink)
 int redirecting_sys_symlink(const char *oldpath, const char *newpath)
 {
 	char local0[REDIR_BUFSIZE];
@@ -175,19 +183,4 @@ int redirecting_sys_symlink(const char *oldpath, const char *newpath)
 	}
 	return orig_sys_symlink(oldpath, newpath);
 }
-
-int redirecting_sys_utime(const char *filename, const struct utimbuf *buf)
-{
-	char local0[REDIR_BUFSIZE];
-	struct utimbuf local1;
-	if(strncpy_from_user(local0, filename, REDIR_BUFSIZE)<0) return -EFAULT;
-	if(wredirect0(local0)) {
-		void *plocal1=NULL;
-		int result;	if(buf && copy_from_user((plocal1=&local1), buf, sizeof(local1))){return -EFAULT;}
-		BEGIN_KMEM
-			result = orig_sys_utime(local0, plocal1);
-		END_KMEM
-		if(no_fallback(result)) return result;
-	}
-	return orig_sys_utime(filename, buf);
-}
+#endif

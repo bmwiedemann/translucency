@@ -1,6 +1,21 @@
+# Basedir where include files for current kernel are installed
 KERNELDIR=/usr/src/linux
+#/lib/modules/$(shell uname -r)/build
+# Basedir where include files for the UserMode linux reside
 KERNELDIR_UM=/usr/src/linux-2.4.18-um27
-CFLAGS=-O2 -Werror -Wall -Wstrict-prototypes -fomit-frame-pointer -pipe -fno-strength-reduce
+
+include $(KERNELDIR)/.config
+# compiler options common to all platforms
+CFLAGS=-O2 -Wall -Werror
+ifdef CONFIG_ALPHA
+CFLAGS+=-Wstrict-prototypes -Wno-trigraphs \
+       -fno-strict-aliasing -fno-common -fomit-frame-pointer -pipe \
+       -mno-fp-regs -ffixed-8 -mcpu=pca56 -Wa,-mev6 
+endif
+ifdef CONFIG_X86
+CFLAGS+=-Wstrict-prototypes -fomit-frame-pointer -pipe -fno-strength-reduce
+endif
+
 F=/tmp/fromdir
 T=/tmp/todir
 M=translucency
@@ -20,7 +35,7 @@ CFLAGS += -D__SMP__ -DSMP
 endif
 endif
 
-CFLAGS += -nostdinc $(KERNELINCLUDE) $(INCLUDE) -I. -I/usr/include
+CFLAGS += -nostdinc $(KERNELINCLUDE) $(INCLUDE) -I. 
 
 all: $M.o
 $M.o: $O
@@ -173,7 +188,7 @@ testrun:
 	make testfiles all > /dev/null
 	make test 2>&1 | diff -u testrun2.txt -
 clean:
-	-rm -f *.o *.rej *.[ch].orig $E.[ch]
+	-rm -f *.o *.rej *.[ch].orig 
 distclean: mrproper
 mrproper: clean
-	-rm -rf /tmp/fromdir /tmp/todir /tmp/linktest *.s *~ .\#*
+	-rm -rf /tmp/fromdir /tmp/todir /tmp/linktest *.s *~ .\#* $E.[ch]

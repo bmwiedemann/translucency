@@ -19,11 +19,11 @@ int translucent_gid   = ANYUID;
 int translucent_flags = 0;
 int translucent_cnt   = 0;
 
-static inline int match_uids(void) {
-	uid_t (*geteuid)(void)=sys_call_table[__NR_geteuid];
-	gid_t (*getegid)(void)=sys_call_table[__NR_getegid];
-	return ((translucent_uid == ANYUID || translucent_uid == geteuid()) && 
-	        (translucent_gid == ANYUID || translucent_gid == getegid()));
+static inline int match_uids(void)
+{
+   struct task_struct *p = current;
+   return (( translucent_uid == ANYUID || translucent_uid == p->euid) &&
+	   ( translucent_gid == ANYUID || translucent_gid == p->egid));
 }
 
 void redirect_namei(struct nameidata *dest, const struct nameidata *src) {

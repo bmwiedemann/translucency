@@ -1,6 +1,6 @@
 # this is an input file for makeext.pl
 #
-# meaning of the trailing + and - is as follows
+# meaning of the preceeding + and - is as follows
 # +  function body that does mkdir-on-the-fly
 # ++ function body that does above and copy-on-the-fly
 # -  function is auto-generated with empty body to be patched in
@@ -31,7 +31,8 @@ int rmdir(const char *pathname);
 +int mknod(const char *pathname, mode_t mode, dev_t dev);
 +int link(const char *oldpath, const char *newpath);
 --+int symlink(const char *oldpath, const char *newpath);
---int utime(const char *filename, const struct utimbuf *buf);
+++int utime(const char *filename, const struct utimbuf *buf);
+++int utimes(const char *filename, const struct timeval *buf);
 #int statfs(const char *path, struct statfs *buf);
 #int acct(const char *filename);
 
