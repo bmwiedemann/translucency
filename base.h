@@ -48,7 +48,7 @@
 #define dflags 0
 #define ANYUID -1
 #define SYSLOGID "translucency"
-#define REDIRS 1
+#define REDIRS 8
 #define MAX_LAYERS 2
 
 struct translucent {
@@ -63,7 +63,7 @@ struct translucent {
 };
 
 #define CTL_TABLE_BASE 0x89194729
-#define CTL_TABLE_STATIC 6
+#define CTL_TABLE_STATIC 7
 #define CTL_ENTRY_BASE (CTL_TABLE_BASE+CTL_TABLE_STATIC)
 
 extern void* sys_call_table[];
