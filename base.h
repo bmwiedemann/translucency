@@ -90,17 +90,20 @@ int  redirect_path       (char *fname, struct translucent *t, int flags);
 void init_redir_calltable    (void);
 void restore_redir_calltable (void);
 
-#define wredirect(t,a)   redirect_path((a),(t),dflags|LOOKUP_MKDIR|LOOKUP_CREATE)
-#define dredirect(t,a)   redirect_path((a),(t),dflags|LOOKUP_MKDIR)
-#define redirect(t,a)    redirect_path((a),(t),dflags)
-//#define unredirect(t,a)  redirect_path((a),(t),dflags)
 
-#define wredirect0(a)    redirect_path((a),0,dflags|LOOKUP_MKDIR|LOOKUP_CREATE)
-#define dredirect0(a)    redirect_path((a),0,dflags|LOOKUP_MKDIR)
-#define redirect0(a)     redirect_path((a),0,dflags)
+static inline int wredirectt(struct translucent *t, char *a) { return redirect_path(a,t,dflags|LOOKUP_MKDIR|LOOKUP_CREATE); }
+static inline int dredirectt(struct translucent *t, char *a) { return redirect_path(a,t,dflags|LOOKUP_MKDIR); }
+static inline int  redirectt(struct translucent *t, char *a) { return redirect_path(a,t,dflags); }
 
-#define namei_to_path(n,buf) d_path((n)->dentry, (n)->mnt, buf, REDIR_BUFSIZE)
+static inline int wredirect0(char *a) { return redirect_path(a,0,dflags|LOOKUP_MKDIR|LOOKUP_CREATE); }
+static inline int dredirect0(char *a) { return redirect_path(a,0,dflags|LOOKUP_MKDIR); }
+static inline int  redirect0(char *a) { return redirect_path(a,0,dflags); }
 
+static inline char *namei_to_path(struct nameidata *n, char *buf) 
+{ return d_path((n)->dentry, (n)->mnt, buf, REDIR_BUFSIZE); }
+
+static inline int no_fallback(int error)	// return false if fallback to original filename is wanted
+{ return (error!=-ENOENT && error!=-EROFS); }
 
 #ifndef MODULE_LICENSE
 #define MODULE_LICENSE(name)

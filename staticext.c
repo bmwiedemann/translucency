@@ -53,7 +53,7 @@ int a(unsigned int fd, struct c *dirp, unsigned int count)\
          }\
          if (i == REDIRS) return 0;\
 	p = d_path(f->f_dentry, f->f_vfsmnt, buf, REDIR_BUFSIZE); memmove(buf,p,strlen(p)+1);\
-	if (redirect(&redirs[i], buf)==2) {\
+	if (redirectt(&redirs[i], buf)==2) {\
 		int (*orig_sys_close)(int)=sys_call_table[__NR_close];\
 		BEGIN_KMEM\
 			result = orig_sys_open(buf, O_RDONLY, 0644);\
@@ -137,7 +137,7 @@ int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 		BEGIN_KMEM
 			result = orig_sys_open(local0, redirflags, mode);
 		END_KMEM
-		if(result!=-ENOENT) return result;
+		if(no_fallback(result)) return result;
 	}
 	return orig_sys_open(pathname, oflags, mode);
 }
@@ -168,7 +168,7 @@ int redirecting_sys_symlink(const char *oldpath, const char *newpath)
 		BEGIN_KMEM
 			result = orig_sys_symlink(local0, local1);
 		END_KMEM
-		if(result!=-ENOENT) return result;
+		if(no_fallback(result)) return result;
 	}
 	return orig_sys_symlink(oldpath, newpath);
 }
@@ -184,7 +184,7 @@ int redirecting_sys_utime(const char *filename, const struct utimbuf *buf)
 		BEGIN_KMEM
 			result = orig_sys_utime(local0, plocal1);
 		END_KMEM
-		if(result!=-ENOENT) return result;
+		if(no_fallback(result)) return result;
 	}
 	return orig_sys_utime(filename, buf);
 }

@@ -114,7 +114,7 @@ $inputcopy[0]
 		BEGIN_KMEM
 			result = orig_sys_$funcname($localparams);
 		END_KMEM
-$outputcopy		if(result!=-ENOENT) return result;
+$outputcopy		if(no_fallback(result)) return result;
 	}
 	return orig_sys_$funcname($paramnames);
 }

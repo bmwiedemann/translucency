@@ -19,7 +19,7 @@ int translucent_gid   = ANYUID;
 int translucent_flags = 0;
 int translucent_cnt   = 0;
 
-inline int match_uids(void) {
+static inline int match_uids(void) {
 	uid_t (*geteuid)(void)=sys_call_table[__NR_geteuid];
 	gid_t (*getegid)(void)=sys_call_table[__NR_getegid];
 	return ((translucent_uid == ANYUID || translucent_uid == geteuid()) && 
@@ -32,12 +32,12 @@ void redirect_namei(struct nameidata *dest, const struct nameidata *src) {
 	*dest = *src;
 }
 
-void copy_namei(struct nameidata *dest, const struct nameidata *src) {
+static inline void copy_namei(struct nameidata *dest, const struct nameidata *src) {
 	mntget(src->mnt);  dget(src->dentry);
 	*dest = *src;
 }
 
-inline int match_namei(const struct nameidata *n1, const struct nameidata *n2) {
+static inline int match_namei(const struct nameidata *n1, const struct nameidata *n2) {
 	return (n1->dentry == n2->dentry);
 }
 
@@ -96,7 +96,7 @@ int mymkdir(struct nameidata *nd, struct nameidata *n, int mode, struct transluc
 	p = namei_to_path(nd, buf);
 	memmove(buf,p,strlen(p)+1);
 //	printk(KERN_DEBUG SYSLOGID ": mkdir %s %.4o\n",buf,mode);
-	if(redirect(t,buf)) {
+	if(redirectt(t,buf)) {
 		current->fs->umask = 0;
 		BEGIN_KMEM
 			result=orig_sys_mkdir(buf,mode);
@@ -111,7 +111,7 @@ int mymkdir(struct nameidata *nd, struct nameidata *n, int mode, struct transluc
 	return -1;
 }
 
-int mymkdir2(struct nameidata *nd, struct nameidata *n, struct translucent *t) {
+static inline int mymkdir2(struct nameidata *nd, struct nameidata *n, struct translucent *t) {
 	return mymkdir(nd,n,nd->dentry->d_inode->i_mode,t);
 }
 
@@ -168,7 +168,7 @@ int redirect_path_init(char *name, unsigned int flags,
 }
 
 // returns highest index of valid layer and -1 if nil
-inline int any_valid(int layers, char *valid)
+static inline int any_valid(int layers, char *valid)
 {
 	int i;
 	for(i=layers-1; i>=0; --i) if(valid[i]) break;
