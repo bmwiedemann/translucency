@@ -25,7 +25,7 @@ E=extension
 
 KERNELVERSION = $(shell awk -F\" '/UTS_RELEASE/{print $$2}' ${KERNELDIR}/include/linux/version.h )
 KERNELINCLUDE = $(shell if [ "${ARCH}" = "um" ] ; \
-	then echo -I$(KERNELDIR_UM)/include -I$(KERNELDIR_UM)/arch/um/include ; \
+	then echo -I$(KERNELDIR_UM)/include -I$(KERNELDIR_UM)/arch/um/include -I$(KERNELDIR_UM)/arch/um/kernel/skas/include -I$(KERNELDIR_UM)/arch/um/kernel/tt/include; \
 	else echo -I$(KERNELDIR)/include ; fi)
 
 CFLAGS += -D__KERNEL__ -DMODULE
@@ -59,7 +59,7 @@ extdiff:
 %.o: %.c base.h compatibility.h extension.h
 	gcc -c $(CFLAGS) $<
 %.s: %.c Makefile
-	gcc -S $(CFLAGS) $<
+	gcc -S -g $(CFLAGS) $<
 install: all
 	gzip -c9 $M.8 > $M.8.gz
 	install -d $(DESTDIR){/usr/share/man/man8/,/lib/modules/${KERNELVERSION}/kernel/fs/,/sbin/}
