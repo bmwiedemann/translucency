@@ -28,6 +28,7 @@ int readlink(const char *path, char *buf, size_t bufsiz);
 :+int symlink(const char *oldpath, const char *newpath);
 :+int mkdir(const char *pathname, mode_t mode);
 --int chdir(const char *path);
+--int fchdir(int fd);
 int rmdir(const char *pathname);
 ++int chmod(const char *path, mode_t mode);
 ++int chown(const char *path, uid_t owner, gid_t group);

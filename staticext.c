@@ -169,6 +169,36 @@ int redirecting_sys_chdir(const char *path)
 }
 #endif
 
+#if defined(__NR_fchdir)
+int redirecting_sys_fchdir(int fd)
+{
+	int result;
+        result=orig_sys_fchdir(fd);
+        if(result==-ENOTDIR) {
+                off_t (*sys_lseek)(int fildes, off_t offset, int whence)=sys_call_table[__NR_lseek];
+        	ssize_t (*sys_read)(int fd, void *buf, size_t count)=sys_call_table[__NR_read];
+		struct dirent64 inbuf, *in=&inbuf;
+                long long origpos=sys_lseek(fd, 0, 1/*SEEK_CUR*/);
+                if(origpos<0) return -ENOTDIR; // this could be a pipe/dev/socket
+                sys_lseek(fd, 0, 0/*SEEK_SET*/);
+		BEGIN_KMEM
+			result=sys_read(fd, in, sizeof(struct dirent64));\
+                END_KMEM
+                if(result!=(int)sizeof(struct dirent64) || inbuf.d_ino!=valid_translucency) {
+                        printk(SYSLOGID ": fchdir on file detected %i\n", result);
+                        if(result>0) {
+                                sys_lseek(fd, origpos, 0/*SEEK_SET*/);
+                        }
+                        return -ENOTDIR;
+                }
+                BEGIN_KMEM
+                        result=orig_sys_chdir(inbuf.d_name);
+		END_KMEM
+        }
+        return result;
+}
+#endif
+
 #if defined(__NR_socketcall)
 #include <linux/un.h>
 /// catch bind+connect syscall for named AF_UNIX sockets - needed for syslog, gpm, nscd and resmgr
