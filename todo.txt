@@ -1,13 +1,8 @@
 TODO list:
 find "device busy" bug (probably missing dput/release_path somewhere)
 extensive testing, compile kernel
-rewrite getdents for layers>=2
-sort & uniq within getdents and whiteout entry support
-automatically create whiteout entries on unlink/rmdir
-automatically remove whiteout entries on create/open/mkdir/mknod/bind/(sym)link
 allow specification of excluded directories (e.g. mount points) 
 better .. handling 
 better symlink handling
-mkdir on chmod $dir
 
 `grep TODO *`
