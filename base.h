@@ -45,7 +45,7 @@
 #define dflags 0
 #define ANYUID -1
 #define SYSLOGID "translucency"
-#define REDIRS 8
+#define REDIRS 1
 #define MAX_LAYERS 2
 
 struct translucent {
