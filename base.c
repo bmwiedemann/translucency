@@ -11,8 +11,8 @@
 
 #include "base.h"
 
-/* There are only 8 redirections possible */
-struct translucent redirs[8];
+/* There are up to REDIRS redirections possible */
+struct translucent redirs[REDIRS];
 int translucent_uid   = ANYUID;
 int translucent_gid   = ANYUID;
 int translucent_flags = 0;
@@ -262,8 +262,8 @@ int redirect_path(char *fname, struct translucent *t, const struct nameidata *n1
 	struct nameidata n,nori;
 	if ((translucent_flags & no_translucency) || !match_uids()) return 0;
 	if (t == NULL) {
-		for (i=0; i<8; i++) {
-			if (redirs[i].valid == valid_translucency) {
+		for (i=0; i<REDIRS; i++) {
+			if (is_valid(&redirs[i])) {
 				t = &redirs[i];
 				n1 = &t->n1;
 				n2 = &t->n2;
@@ -272,7 +272,7 @@ int redirect_path(char *fname, struct translucent *t, const struct nameidata *n1
 				if (!error) break;
 			}
 		}
-		if (i==8) { goto out_release; }
+		if (i==REDIRS) { goto out_release; }
 	} else {
 		redirect_path_init(fname,rflags,&n,&nori,n1,n2,t);
 		error = redirect_path_walk(fname,&p2,&n,&nori,n1,n2,t);
@@ -387,22 +387,11 @@ static int proc_doint_ro(ctl_table *table, int write, struct file *filp,
 	return 0;
 }
 
-
-#define REDIR_ENTRY(n) {CTL_ENTRY_BASE+n,#n,&redirs[n].b,REDIR_BUFSIZE-1,0644,NULL,&redir_handler}
-struct ctl_table redirection_dir_table[] = {
+struct ctl_table redirection_dir_table[REDIRS+CTL_TABLE_STATIC] = {
 	{CTL_TABLE_BASE+1, "uid",   &translucent_uid,   sizeof(translucent_uid),   0644, NULL, &proc_dointvec},
 	{CTL_TABLE_BASE+2, "gid",   &translucent_gid,   sizeof(translucent_gid),   0644, NULL, &proc_dointvec},
 	{CTL_TABLE_BASE+3, "flags", &translucent_flags, sizeof(translucent_flags), 0644, NULL, &proc_dointvec},
 	{CTL_TABLE_BASE+4, "used",  &translucent_cnt,   sizeof(translucent_cnt),   0444, NULL, &proc_doint_ro},
-	REDIR_ENTRY(0), 
-	REDIR_ENTRY(1),
-	REDIR_ENTRY(2),
-	REDIR_ENTRY(3),
-	REDIR_ENTRY(4),
-	REDIR_ENTRY(5),
-	REDIR_ENTRY(6),
-	REDIR_ENTRY(7),
-	{0}
 };
 struct ctl_table_header *redirection_table_header;
 struct ctl_table redirection_table[] = {
@@ -410,11 +399,22 @@ struct ctl_table redirection_table[] = {
 	{0}
 };
 
+// this *5 means four digits per entry, allowing at least REDIRS==9999
+char redirection_dir_table_name_buffer[REDIRS*5];
+
 int __init translucent_init_module(void) 
 {
 	int i;
+	char *buffer_allocated=redirection_dir_table_name_buffer;
 	memset(&redirs, 0, sizeof(redirs));
-	for (i=0; i<8; i++) redirs[i].index=i;
+	for (i=0; i<REDIRS; i++) {
+		struct ctl_table new={CTL_ENTRY_BASE+i,buffer_allocated,&redirs[i].b,REDIR_BUFSIZE-1,0644,NULL,&redir_handler};
+		sprintf(buffer_allocated,"%d",i);
+		buffer_allocated+=5;
+		redirection_dir_table[CTL_TABLE_STATIC+i-1]=new;
+		redirs[i].index=i;
+	}
+	//assert(redirection_dir_table[REDIRS+CTL_TABLE_STATIC-1]=={0})
 	init_redir_calltable();
 	redirection_table_header = register_sysctl_table(redirection_table, 0);
 	return 0;

@@ -43,6 +43,7 @@
 #define dflags 0
 #define ANYUID -1
 #define SYSLOGID "translucency"
+#define REDIRS 8
 
 struct translucent {
 #define valid_translucency  (0x77abc713)
@@ -51,7 +52,7 @@ struct translucent {
 #define is_valid(t) ((t)->valid == valid_translucency)
 	unsigned long valid;
 	char flags;
-	char index; /* only 8 possible, for now */
+	char index; /* up to REDIRS possible */
 	char from[REDIR_BUFSIZE];
 	char to[REDIR_BUFSIZE];
 	struct nameidata n1, n2;
@@ -59,10 +60,11 @@ struct translucent {
 };
 
 #define CTL_TABLE_BASE 0x89194729
-#define CTL_ENTRY_BASE (CTL_TABLE_BASE+5)
+#define CTL_TABLE_STATIC 5
+#define CTL_ENTRY_BASE (CTL_TABLE_BASE+CTL_TABLE_STATIC)
 
 extern void* sys_call_table[];
-extern struct translucent redirs[8];
+extern struct translucent redirs[REDIRS];
 extern int translucent_uid;
 extern int translucent_gid;
 extern int translucent_flags;

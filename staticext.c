@@ -44,7 +44,7 @@ int a(unsigned int fd, struct c *dirp, unsigned int count)\
 	if (fd > current->files->max_fds) return -EBADF;\
 	f = current->files->fd[fd];\
          if (!deldir(f)) return 0;\
-         for (i=0; i<8; i++) {\
+         for (i=0; i<REDIRS; i++) {\
                   if (is_valid(&redirs[i])) {\
   	                 if (!is_subdir(f->f_dentry, redirs[i].n1.dentry) || \
 	                     ((redirs[i].flags & to_is_subdir) && \
@@ -52,7 +52,7 @@ int a(unsigned int fd, struct c *dirp, unsigned int count)\
                           break;\
                   }\
          }\
-         if (i == 8) return 0;\
+         if (i == REDIRS) return 0;\
 	p = d_path(f->f_dentry, f->f_vfsmnt, buf, REDIR_BUFSIZE); memmove(buf,p,strlen(p)+1);\
 	if (redirect(&redirs[i], buf)) {\
 		int (*orig_sys_close)(int)=sys_call_table[SYS_close];\
