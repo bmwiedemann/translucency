@@ -85,6 +85,7 @@ foreach(@lines) {
 	my $xn;
 	my $laststr;
 	my $firststr;
+        if($creation&1) { $redirflags.="|LOOKUP_CREATES" }
 	foreach(@params) {
 	  /(\w+)$/;
 	  my $name=$1;push(@paramnames,$name);
@@ -101,7 +102,7 @@ foreach(@lines) {
 			$def.="[REDIR_BUFSIZE]";
 			$laststr=$n;
 			$firststr=$n unless defined $firststr;
-			if($input) {my $c=($varcount>=1 && $pn=~/path|file/)?" rresult=redirect0($n);":"";push(@inputcopy,"if(strncpy_from_user($n, $pn, REDIR_BUFSIZE)<0) return -EFAULT;$c")}
+			if($input) {my $c=($varcount>=1 && $pn=~/path|file/)?"if((rresult=redirect2($n, $redirflags))<0) return rresult;":"";push(@inputcopy,"if(strncpy_from_user($n, $pn, REDIR_BUFSIZE)<0) return -EFAULT;");if($c){push(@inputcopy,$c)}}
 			else {
 				$xn=$n."size";
 				splice(@inputcopy,1,0,"size_t $xn=($nn<REDIR_BUFSIZE?$nn:REDIR_BUFSIZE);");
@@ -130,11 +131,15 @@ foreach(@lines) {
 	  }
 	  $varcount++;
 	}
-	if($creation&1) { push(@inputcopy, "if(rresult&4) BEGIN_KMEM orig_sys_unlink($laststr); END_KMEM"); push(@outputcopy, "if(result<0 && rresult&4) translucent_create_whiteout($laststr);"); }
+	my $manyargs=$laststr ne $firststr;
+	if($creation&1) {
+		push(@inputcopy, "if(rresult&4) BEGIN_KMEM orig_sys_unlink($laststr); END_KMEM");
+		push(@outputcopy, "if(result<0 && rresult&4) translucent_create_whiteout($laststr);"); 
+	}
 	if($creation&2) { $redirflags.="|LOOKUP_TRUNCATE"; push(@outputcopy, "if(result==0 && (rresult&2) && (translucent_flags&do_whiteout)) translucent_create_whiteout(local0);"); }
 
 # individual patches
-	if($funcname eq "symlink") {my $h=$inputcopy[1];$inputcopy[1]=$inputcopy[0];$h=~s/rresult.*//;$inputcopy[0]=$h;$firststr=$laststr;}
+	if($funcname eq "symlink" || $funcname eq "link") {my $h=$inputcopy[1];$inputcopy[1]=$inputcopy[0];$inputcopy[0]=$h;$firststr=$laststr;$inputcopy[2]="";}
 	if($funcname eq "access") {$redirflags.="|(mode==2/*W_OK*/?LOOKUP_MKDIR|LOOKUP_CREATE:0)"}
 	if($funcname eq "mkdir") {$inputcopy[0].=" rresult=strlen(local0)-1;if(local0[rresult]=='/'){local0[rresult]=0;}";}
 
