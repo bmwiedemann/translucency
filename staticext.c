@@ -130,14 +130,13 @@ int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 	char local0[REDIR_BUFSIZE];
 	int extraflags=LOOKUP_NODIR, redirflags=oflags, rresult;
 	if((oflags&O_CREAT) || (oflags&O_WRONLY) || (oflags&O_RDWR)|| (oflags&O_APPEND)) {
-		extraflags|=LOOKUP_MKDIR;
-		if(!(oflags&O_TRUNC)) extraflags|=LOOKUP_CREATE|LOOKUP_MKDIR;
+		extraflags|=LOOKUP_CREATE|LOOKUP_MKDIR;
+		if(oflags&O_TRUNC) extraflags|=LOOKUP_TRUNCATE;
 	}
 	//TODO: consider O_EXCL|O_CREAT here
 	if(strncpy_from_user(local0, pathname, REDIR_BUFSIZE)<0) return -EFAULT;
 	if((rresult=redirect_path(local0,0, dflags | extraflags))) {
 		int result;
-		if(rresult>1 && (extraflags&LOOKUP_MKDIR)) { if(!mode) mode=0100666; redirflags|=O_CREAT; } // this is dirty -> TODO: better do COW for that without copying content. makes clever gnu cp work which omits O_CREAT flag if previous stat returned 0
 		BEGIN_KMEM
 			result = orig_sys_open(local0, redirflags, mode);
 		END_KMEM

@@ -50,7 +50,7 @@ inline int is_special(struct nameidata *n) {
 		|| n->dentry->d_inode->i_sb->s_magic==PROC_SUPER_MAGIC);
 }
 
-int mycopy(struct nameidata *nd, struct nameidata *nnew) {
+int translucent_copy(struct nameidata *nd, struct nameidata *nnew, int lookup_flags) {
 	char *p,buf[REDIR_BUFSIZE+1];
 	ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[__NR_write];	
 	ssize_t (*sys_read)(int fd, void *buf, size_t count)=sys_call_table[__NR_read];
@@ -78,17 +78,18 @@ int mycopy(struct nameidata *nd, struct nameidata *nnew) {
 	if(result<0) goto out_close;
 	outphandle=result;
 
-	BEGIN_KMEM
-		while((result=sys_read(inphandle,buf,REDIR_BUFSIZE))>0&&sys_write(outphandle,buf,result)>0);
-	END_KMEM
-
+	if(!(lookup_flags&LOOKUP_TRUNCATE)) {
+		BEGIN_KMEM
+			while((result=sys_read(inphandle,buf,REDIR_BUFSIZE))>0&&sys_write(outphandle,buf,result)>0);
+		END_KMEM
+	} else result=0;
 	sys_close(outphandle);
 out_close:
 	sys_close(inphandle);
 	return result;
 }
 
-int mymkdir(struct nameidata *nd, struct nameidata *n, int mode, struct translucent *t) {
+int translucent_mkdir(struct nameidata *nd, struct nameidata *n, int mode, struct translucent *t) {
 	char *p,buf[REDIR_BUFSIZE+1];
 	int result, umask=current->fs->umask;
 	if ((translucent_flags&no_copyonwrite)) return -1;
@@ -112,7 +113,7 @@ int mymkdir(struct nameidata *nd, struct nameidata *n, int mode, struct transluc
 }
 
 static inline int mymkdir2(struct nameidata *nd, struct nameidata *n, struct translucent *t) {
-	return mymkdir(nd,n,nd->dentry->d_inode->i_mode,t);
+	return translucent_mkdir(nd,n,nd->dentry->d_inode->i_mode,t);
 }
 
 void absolutize(char *name, struct dentry *d, struct vfsmount *m) {
@@ -253,7 +254,7 @@ int redirect_path_walk(char *name, char **endp,
 			}
 		 } else if((lflags&LOOKUP_CREATE) && !(translucent_flags&no_copyonwrite)) {
 //			char buf[REDIR_BUFSIZE];printk(KERN_DEBUG SYSLOGID ": mycopy %s %.6o\n",namei_to_path(nd,buf),mode);
-			error = mycopy(&n[j],&n[t->layers-1]);
+			error = translucent_copy(&n[j],&n[t->layers-1],lflags);
 		 }
 			}
 			current->fs->umask = umask;
@@ -467,6 +468,9 @@ void __exit translucent_cleanup_module(void)
 
 MODULE_AUTHOR("See http://sourceforge.net/projects/translucency/");
 MODULE_DESCRIPTION("translucency/redirection");
+#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
+#endif
+
 module_init(translucent_init_module);
 module_exit(translucent_cleanup_module);

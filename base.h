@@ -9,6 +9,8 @@
  *
  * ----------------------------------------------------------------------- */
 
+#ifndef _BASE_H_INCLUDED_
+#define _BASE_H_INCLUDED_
 #define MAKING_MODULES 1
 
 #include <linux/types.h>
@@ -28,17 +30,15 @@
 #include <linux/utime.h>
 #include <linux/ctype.h>
 
-#ifndef _BASE_H_INCLUDED_
-#define _BASE_H_INCLUDED_
 #include "compatibility.h"
 #include "extension.h"
-#endif
 
 #define LOOKUP_MKDIR	0x80000000
 #define LOOKUP_CREATE	0x40000000
 #define LOOKUP_NODIR	0x20000000
 #define LOOKUP_NOSPECIAL	0x20000000
-#define LOOKUP_TRANSLUCENCY_MASK 0x1fffffff
+#define LOOKUP_TRUNCATE 0x10000000
+#define LOOKUP_TRANSLUCENCY_MASK 0x0fffffff
 
 // 2000 here is too much, since kernel stack is small and mymkdir does one recursion
 #define REDIR_BUFSIZE 1023
@@ -106,6 +106,4 @@ static inline char *namei_to_path(struct nameidata *n, char *buf)
 static inline int no_fallback(int error)	// return false if fallback to original filename is wanted
 { return (error!=-ENOENT && error!=-EROFS); }
 
-#ifndef MODULE_LICENSE
-#define MODULE_LICENSE(name)
-#endif
+#endif /* not _BASE_H_INCLUDED_ */
