@@ -1,16 +1,24 @@
-K=/usr/src/linux
-UM=/usr/src/linux-2.4.18-um27
+KERNELDIR=/usr/src/linux
+KERNELDIR_UM=/usr/src/linux-2.4.18-um27
 CFLAGS=-O2 -Werror -Wall -Wstrict-prototypes -fomit-frame-pointer -pipe -fno-strength-reduce
 F=/tmp/fromdir/
 T=/tmp/todir/
 M=translucency
 D=$M
-O=base.o extension.o sysctl.o staticext.o
+O=base.o extension.o staticext.o
 E=ext
 
-#KERNELINCLUDE = `if [ "${ARCH}" = "um" ] ; then echo -I${UM}/include -I${UM}/arch/um/include ; else echo -I$K/include ; fi `
-KERNELINCLUDE = $(shell if [ "${ARCH}" = "um" ] ; then echo -I${UM}/include -I${UM}/arch/um/include ; else echo -I$K/include ; fi )
-ALLINCLUDE = -nostdinc $(KERNELINCLUDE) $(INCLUDE) -I. -I/usr/include
+KERNELINCLUDE = $(shell if [ "${ARCH}" = "um" ] ; \
+	then echo -I$(KERNELDIR_UM)/include -I$(KERNELDIR_UM)/arch/um/include ; \
+	else echo -I$(KERNELDIR)/include ; fi)
+
+CFLAGS += -D__KERNEL__ -DMODULE $(KERNELINCLUDE)
+include $(KERNELDIR)/.config
+ifdef CONFIG_SMP
+CFLAGS += -D__SMP__ -DSMP
+endif
+
+CFLAGS += -nostdinc $(INCLUDE) -I. -I/usr/include
 
 all: $M.o
 $M.o: $O
@@ -31,12 +39,14 @@ extdiff:
 	mv $En.c $E.c
 
 %.o: %.c base.h compatibility.h
-	gcc -c $(CFLAGS) $(ALLINCLUDE) $<
+	gcc -c $(CFLAGS) $<
 %.s: %.c Makefile
-	gcc -S $(CFLAGS) $(ALLINCLUDE) $<
+	gcc -S $(CFLAGS) $<
 
 tar: tgz
 tgz: clean
+	chmod a+rX . -R
+	chmod go-w . -R
 	tar czf ../$D.tar.gz -C .. --owner=0 --group=0 $D/
 
 ramdsk: $T/is_ramdsk
@@ -130,16 +140,16 @@ test: $M.o testfiles
 ktest: $M.o
 	#-rm -rf $T
 	mkdir -p $T/include
-	cp -a $K/include/asm-i386 $T/include/
+	cp -a $(KERNELDIR)/include/asm-i386 $T/include/
 	chown -R nobody. $T
 	sync
-	insmod -f $M.o uid=65534 from=$K to=$T
-	-su nobody -c "cd $K; make menuconfig"
+	insmod -f $M.o uid=65534 from=$(KERNELDIR) to=$T
+	-su nobody -c "cd $(KERNELDIR); make menuconfig"
 	echo 8 >/proc/sys/translucency/flags	#turn off merged dir listings
-	-su nobody -c "cd $K; make dep"
+	-su nobody -c "cd $(KERNELDIR); make dep"
 	echo 0 >/proc/sys/translucency/flags
 	rm $T/include/asm; ln -s asm-i386 $T/include/asm
-	-su nobody -c "cd $K; make bzImage modules"
+	-su nobody -c "cd $(KERNELDIR); make bzImage modules"
 	#rmmod $M
 
 testrun:
@@ -147,6 +157,6 @@ testrun:
 	make testfiles all > /dev/null
 	make test | diff -u testrun2.txt -
 clean:
-	-rm *.o *.rej *.[ch].orig $E.[ch]
+	-rm -f *.o *.rej *.[ch].orig $E.[ch]
 mrproper: clean
 	-rm -rf $F $T /tmp/linktest *.s

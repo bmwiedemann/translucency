@@ -36,19 +36,27 @@ int deldir(struct file *dir) {
 #define redirecting_sys_getdentsxx(a,orig,c)\
 int a(unsigned int fd, struct c *dirp, unsigned int count)\
 {\
-	char buf[ps+1],*p;\
-	int result;\
+	char buf[REDIR_BUFSIZE+1],*p;\
+	int result,i;\
 	struct file *f;\
 	result = orig(fd, dirp, count);\
-	if(no_getdents || result) return result;\
-	if(fd>current->files->max_fds) return -EBADF;\
-	f=current->files->fd[fd];\
-	if(!deldir(f) || !is_subdir(f->f_dentry, n1.dentry) || \
-	  (to_is_subdir && is_subdir(f->f_dentry, n2.dentry))) return 0;\
-	p=d_path(f->f_dentry, f->f_vfsmnt, buf, ps); memmove(buf,p,strlen(p)+1);\
-	if(redirect(buf)) {\
+	if (translucent_flags & no_getdents || result) return result;\
+	if (fd > current->files->max_fds) return -EBADF;\
+	f = current->files->fd[fd];\
+         if (!deldir(f)) return 0;\
+         for (i=0; i<8; i++) {\
+                  if (is_valid(&redirs[i])) {\
+  	                 if (!is_subdir(f->f_dentry, redirs[i].n1.dentry) || \
+	                     ((redirs[i].flags & to_is_subdir) && \
+		                is_subdir(f->f_dentry, redirs[i].n2.dentry))) continue;\
+                          break;\
+                  }\
+         }\
+         if (i == 8) return 0;\
+	p = d_path(f->f_dentry, f->f_vfsmnt, buf, REDIR_BUFSIZE); memmove(buf,p,strlen(p)+1);\
+	if (redirect(&redirs[i], buf)) {\
 		int (*orig_sys_close)(int)=sys_call_table[SYS_close];\
-		BEGIN_KMEM \
+		BEGIN_KMEM\
 			result = orig_sys_open(buf, O_RDONLY, 0644);\
 		END_KMEM\
 		if(result<0) return 0;\
@@ -65,9 +73,9 @@ redirecting_sys_getdentsxx(redirecting_sys_getdents,orig_sys_getdents,dirent)
 redirecting_sys_getdentsxx(redirecting_sys_getdents64,orig_sys_getdents64,dirent64)
 
 int redirecting_execve_test(char **filename) {
-	char local0[ps];
-	if(strncpy_from_user(local0, *filename, ps)<0) return -EFAULT;
-	if(redirect(local0)) {
+	char local0[REDIR_BUFSIZE];
+	if(strncpy_from_user(local0, *filename, REDIR_BUFSIZE)<0) return -EFAULT;
+	if(redirect0(local0)) {
 		int (*access)(const char *pathname, int mode)=sys_call_table[SYS_access];
 		int result;
 //		printk("execve-redir: %s\n",local0);
@@ -110,15 +118,15 @@ SYMBOL_NAME_STR(redirecting_sys_execve) ":\n\t"
 
 int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 {
-	char local0[ps];
+	char local0[REDIR_BUFSIZE];
 	int extraflags=LOOKUP_NODIR, redirflags=oflags, rresult;
 	if((oflags&O_CREAT) || (oflags&O_WRONLY) || (oflags&O_RDWR)|| (oflags&O_APPEND)) {
 		extraflags|=LOOKUP_MKDIR;
 		if(!(oflags&O_TRUNC)) extraflags|=LOOKUP_CREATE|LOOKUP_MKDIR;
 	}
 	//TODO: consider O_EXCL|O_CREAT here
-	if(strncpy_from_user(local0, pathname, ps)<0) return -EFAULT;
-	if((rresult=redirect_path(local0,&n1,&n2,dflags | extraflags))) {
+	if(strncpy_from_user(local0, pathname, REDIR_BUFSIZE)<0) return -EFAULT;
+	if((rresult=redirect_path(local0,0,0,0,dflags | extraflags))) {
 		int result;
 		if(rresult>1 && (extraflags&LOOKUP_MKDIR)) redirflags|=O_CREAT; //makes clever gnu cp work which omits O_CREAT flag if previous stat returned 0
 		BEGIN_KMEM
@@ -131,11 +139,11 @@ int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 
 int redirecting_sys_chdir(const char *path)
 {
-	char local0[ps];
+	char local0[REDIR_BUFSIZE];
 	int result = orig_sys_chdir(path);
 	if(result>=0) return result;
-	if(strncpy_from_user(local0, path, ps)<0) return -EFAULT;
-	if(redirect(local0)) {
+	if(strncpy_from_user(local0, path, REDIR_BUFSIZE)<0) return -EFAULT;
+	if(redirect0(local0)) {
 		BEGIN_KMEM
 			result = orig_sys_chdir(local0);
 		END_KMEM
@@ -145,13 +153,13 @@ int redirecting_sys_chdir(const char *path)
 
 int redirecting_sys_symlink(const char *oldpath, const char *newpath)
 {
-	char local0[ps];
-	char local1[ps];
+	char local0[REDIR_BUFSIZE];
+	char local1[REDIR_BUFSIZE];
 	int rresult;
-	if(strncpy_from_user(local1, newpath, ps)<0) return -EFAULT;
-	if((rresult=dredirect(local1))>0) {
-		int result;	if(strncpy_from_user(local0, oldpath, ps)<0)return -EFAULT; //redirect(local0);
-		if(local0[0]!='/' && is_subdir(current->fs->pwd,n1.dentry) && rresult>1) absolutize(local0,current->fs->pwd, current->fs->pwdmnt);
+	if(strncpy_from_user(local1, newpath, REDIR_BUFSIZE)<0) return -EFAULT;
+	if((rresult=dredirect0(local1))>0) {
+		int result;	if(strncpy_from_user(local0, oldpath, REDIR_BUFSIZE)<0)return -EFAULT; //redirect(local0);
+//FIXME		if(local0[0]!='/' && is_subdir(current->fs->pwd,n1.dentry) && rresult>1) absolutize(local0,current->fs->pwd, current->fs->pwdmnt);
 		BEGIN_KMEM
 			result = orig_sys_symlink(local0, local1);
 		END_KMEM
@@ -162,10 +170,10 @@ int redirecting_sys_symlink(const char *oldpath, const char *newpath)
 
 int redirecting_sys_utime(const char *filename, const struct utimbuf *buf)
 {
-	char local0[ps];
+	char local0[REDIR_BUFSIZE];
 	struct utimbuf local1;
-	if(strncpy_from_user(local0, filename, ps)<0) return -EFAULT;
-	if(wredirect(local0)) {
+	if(strncpy_from_user(local0, filename, REDIR_BUFSIZE)<0) return -EFAULT;
+	if(wredirect0(local0)) {
 		void *plocal1=NULL;
 		int result;	if(buf && copy_from_user((plocal1=&local1), buf, sizeof(local1))){return -EFAULT;}
 		BEGIN_KMEM
