@@ -1,9 +1,16 @@
 #!/bin/sh
-modprobe translucency
-echo "$1 -> $2" > /proc/sys/translucency/0
+/sbin/modprobe translucency
+for entry in /proc/sys/translucency/[0-9]* ; 
+  do if grep -vq . $entry ; then free=$entry; break ; fi
+done ;
+if test -z "$free" ; then
+  echo "mount.translucency: no free redir left"
+  exit 1
+fi
+echo "$1 -> $2" > $free
 shift 2
 if [ $1 = "-o" ] ; then
   shift
 # TODO: parse options in $1 here
 # e.g. $1 = "rw,flags=4,uid=65534"
-fi 
+fi
