@@ -17,6 +17,7 @@
 #include <asm/segment.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/init.h>
 #include <linux/stat.h>
 #include <linux/dirent.h>
 #include <linux/fs_struct.h>
@@ -37,6 +38,7 @@
 #define LOOKUP_CREATE	0x40000000
 #define LOOKUP_NODIR	0x20000000
 #define LOOKUP_NOSPECIAL	0x20000000
+#define LOOKUP_TRANSLUCENCY_MASK 0x1fffffff
 
 //4000 here is too much
 #define REDIR_BUFSIZE 1023
@@ -44,18 +46,18 @@
 #define ANYUID -1
 #define SYSLOGID "translucency"
 #define REDIRS 8
+#define MAX_LAYERS 2
 
 struct translucent {
 #define valid_translucency  (0x77abc713)
-#define from_is_subdir      (1<<0)
-#define to_is_subdir        (1<<1)
 #define is_valid(t) ((t)->valid == valid_translucency)
 	unsigned long valid;
 	char flags;
-	char index; /* up to REDIRS possible */
+	int index; /* up to REDIRS possible */
+	int layers;
 	char from[REDIR_BUFSIZE];
 	char to[REDIR_BUFSIZE];
-	struct nameidata n1, n2;
+	struct nameidata n[MAX_LAYERS];
 	char b[REDIR_BUFSIZE];
 };
 
@@ -84,22 +86,19 @@ int  have_inode          (struct nameidata *);
 int  is_special          (struct nameidata *);
 int  is_subdir           (struct dentry *dir, struct dentry *parent);
 void absolutize          (char *name, struct dentry *d, struct vfsmount *m);
-int  redirect_path_walk  (char *name, char **endp, struct nameidata *n, struct nameidata *nori, 
-			  const struct nameidata *n1, const struct nameidata *n2, struct translucent *t);
-int  redirect_path       (char *fname, struct translucent *t, 
-			  const struct nameidata *n1, const struct nameidata *n2, int flags);
+int  redirect_path_walk  (char *name, char **endp, struct nameidata *n, struct translucent *t);
+int  redirect_path       (char *fname, struct translucent *t, int flags);
 
 void init_redir_calltable    (void);
 void restore_redir_calltable (void);
 
-#define wredirect(t,a)   redirect_path((a),(t),&((t)->n1),&((t)->n2),dflags|LOOKUP_MKDIR|LOOKUP_CREATE)
-#define dredirect(t,a)   redirect_path((a),(t),&((t)->n1),&((t)->n2),dflags|LOOKUP_MKDIR)
-#define redirect(t,a)    redirect_path((a),(t),&((t)->n1),&((t)->n2),dflags)
-#define unredirect(t,a)  redirect_path((a),(t),&((t)->n1),&((t)->n2),dflags)
+#define wredirect(t,a)   redirect_path((a),(t),dflags|LOOKUP_MKDIR|LOOKUP_CREATE)
+#define dredirect(t,a)   redirect_path((a),(t),dflags|LOOKUP_MKDIR)
+#define redirect(t,a)    redirect_path((a),(t),dflags)
+//#define unredirect(t,a)  redirect_path((a),(t),dflags)
 
-#define wredirect0(a)    redirect_path((a),0,0,0,dflags|LOOKUP_MKDIR|LOOKUP_CREATE)
-#define dredirect0(a)    redirect_path((a),0,0,0,dflags|LOOKUP_MKDIR)
-#define redirect0(a)     redirect_path((a),0,0,0,dflags)
+#define wredirect0(a)    redirect_path((a),0,dflags|LOOKUP_MKDIR|LOOKUP_CREATE)
+#define dredirect0(a)    redirect_path((a),0,dflags|LOOKUP_MKDIR)
+#define redirect0(a)     redirect_path((a),0,dflags)
 
 #define namei_to_path(n,buf) d_path((n)->dentry, (n)->mnt, buf, REDIR_BUFSIZE)
-

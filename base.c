@@ -121,20 +121,18 @@ void absolutize(char *name, struct dentry *d, struct vfsmount *m) {
 }
 
 int redirect_path_init(char *name, unsigned int flags, 
-		       struct nameidata *nd, struct nameidata *nori, 
-		       const struct nameidata *n1, const struct nameidata *n2,
-		       struct translucent *t)
+		       struct nameidata *n, struct translucent *t)
 {
 	char *np=name;
-	int haddotdot=0;
-	if (path_init(name,flags,nd)==0) return 0;
+	int haddotdot=0,i;
+	if (path_init(name,flags,n)==0) return 0;
 	if (*name!='/'){		// && is_subdir(nd->dentry,n1->dentry)) {
-		absolutize(name,nd->dentry,nd->mnt);
-		path_release(nd);
-		path_init(name,flags,nd);
+		absolutize(name,n->dentry,n->mnt);
+		path_release(n);
+		path_init(name,flags,n);
 		//printk(KERN_INFO "now having %s\n",name);
 	}
-	if (nori) copy_namei(nori,nd);
+	for(i=1; i<t->layers; ++i) copy_namei(&n[i],n);
 
 //this is neccessary to let .. work in pathnames
 	while(1) {
@@ -156,37 +154,48 @@ int redirect_path_init(char *name, unsigned int flags,
 		}
 	}
 	if (haddotdot) {
-		redirect_path (name,t,n2,n1,dflags);
+		//TODO: is that "reverse redirection" needed? redirect_path (name,t,n2,n1,dflags);
 		//printk(KERN_INFO "now having %s\n",name);
 	}
 	return 1;
 }
 
+// returns highest index of valid layer and -1 if nil
+inline int any_valid(int layers, char *valid)
+{
+	int i;
+	for(i=layers-1; i>=0; --i) if(valid[i]) break;
+	return i;
+}
+
+#define redirect_all_namei \
+	for(i=1; i<t->layers; ++i) if(valid[i] && match_namei(&n[i],&t->n[0])) \
+	{ redirect_namei(&n[i],&t->n[i]); something_redirected=1; }
+
 //same as path walk: replaces any occurrence of n1 by n2
 int redirect_path_walk(char *name, char **endp, 
-		       struct nameidata *nd, struct nameidata *nori, 
-		       const struct nameidata *n1, const struct nameidata *n2, 
-		       struct translucent *t) 
+		       struct nameidata *n, struct translucent *t) 
 {
-	char savedchar=0,*slash=name,*np=name,*lastnp=NULL;
-	int error1=0,error2=0,valid1=1,valid2=1,lflags=nd->flags;
-	nd->flags &= 0x1fffffff;
+	char savedchar=0,*slash=name,*np=name,*lastnp=NULL,error=0,something_redirected=0,valid[MAX_LAYERS];
+	int lflags=n->flags,i,j;
+	n->flags &= LOOKUP_TRANSLUCENCY_MASK;
+	memset(valid, 1, sizeof(valid));
 
-	while (np && (valid1 || valid2)) {
-		if (valid2 && match_namei(nd,n1)) redirect_namei(nd,n2);
+	while (np && any_valid(t->layers,valid)>=0) {
+		redirect_all_namei;
 		slash = strchr(np,'/');
 		if (slash) { savedchar = *(++slash); *slash=0; }
-		if (valid1) { 
-			error1 = path_walk(np,nori);
-			if (!error1 && !have_inode(nori)) { path_release(nori); error1 = -1; }
-			if (error1) { valid1=0; }
-		}
-		if (valid2) {
-			error2 = path_walk(np, nd);
-			if (error2 && slash && valid1 && (lflags & LOOKUP_MKDIR) && 
-			    mymkdir2(nori,nd,t)==0) 
-				error2 = 0;
-			if (error2) valid2 = 0;
+		for(i=0; i<t->layers; ++i)
+		 if(valid[i]) {
+			error = path_walk(np,&n[i]);
+			if(i == t->layers-1) {
+			 if(error && slash && (lflags & LOOKUP_MKDIR)) {
+				int j=any_valid(t->layers-1,valid);
+				if (j>=0 && mymkdir2(&n[j],&n[i],t)==0) error = 0;
+			 }
+			} 
+			else if (!error && !have_inode(&n[i])) { path_release(&n[i]); error = -1; }
+			if (error) valid[i] = 0;
 		}
 		if (slash) { *slash = savedchar; }
 
@@ -208,46 +217,49 @@ int redirect_path_walk(char *name, char **endp,
 			}
 		}
 */
-
-		if (valid2 && match_namei(nd,n1)) redirect_namei(nd,n2);
-//		if((lflags & LOOKUP_MKDIR) && !error1 && error2 && valid1 && have_inode(nori)) //have to create dir (echo abc > static/test)
-//		{ error2=mymkdir(nd2,nd1->dentry->d_inode->i_mode); }
+		redirect_all_namei;
 		lastnp=np;
 		np=slash;
 	}	// end of main redirect/walking loop
 
-	if(!slash && valid1 && have_inode(nori) && valid2 && !have_inode(nd)) {
-		int mode=nori->dentry->d_inode->i_mode;
-		if(is_special(nori)) {
+	if(!slash && valid[t->layers-1] && !have_inode(&n[t->layers-1])) {
+		int mode;
+		for(j=t->layers-2; j>=0; --j) if(valid[j] && have_inode(&n[j])) break;
+		if (j>=0) {
+		 mode=n[j].dentry->d_inode->i_mode;
+		 // this does COW
+		 if(is_special(&n[j])) {
 			if((lflags&LOOKUP_NOSPECIAL)) {
-				path_release(nd); valid2=0;
+				path_release(&n[t->layers-1]); valid[t->layers-1]=0;
 			} else if((lflags&LOOKUP_CREATE) && (S_ISBLK(mode) || S_ISCHR(mode)) && !(translucent_flags&no_copyonwrite)) {
 				// this is inlined quasi "mymknod"
-				char buf[REDIR_BUFSIZE],*p=namei_to_path(nd,buf);
-//				printk(KERN_DEBUG SYSLOGID ": mknod %s %.6o %X\n",p,mode,nori->dentry->d_inode->i_rdev);
+				char buf[REDIR_BUFSIZE],*p=namei_to_path(&n[t->layers-1],buf);
+//				printk(KERN_DEBUG SYSLOGID ": mknod %s %.6o %X\n",p,mode,n[j].dentry->d_inode->i_rdev);
 				BEGIN_KMEM
-					orig_sys_mknod(p,mode,nori->dentry->d_inode->i_rdev);
+					orig_sys_mknod(p,mode,n[j].dentry->d_inode->i_rdev);
 				END_KMEM
 			}
-		} else if((lflags&LOOKUP_CREATE) && !(translucent_flags&no_copyonwrite)) {
+		 } else if((lflags&LOOKUP_CREATE) && !(translucent_flags&no_copyonwrite)) {
 //			char buf[REDIR_BUFSIZE];printk(KERN_DEBUG SYSLOGID ": mycopy %s %.6o\n",namei_to_path(nd,buf),mode);
-			mycopy(nori,nd);
+			mycopy(&n[j],&n[t->layers-1]);
+		 }
 		}
 	}
-	if (!valid2 && valid1) {*nd=*nori;valid1=0;}
-	if (valid1) {
-//		char buf[REDIR_BUFSIZE],buf2[REDIR_BUFSIZE];
-//if(valid2)printk("<1>debug: 1 %X %i %s %s\n",lflags, valid1+2*valid2,namei_to_path(nori,buf),namei_to_path(nd,buf2));
-		if (nd->dentry==nori->dentry) {path_release(nd);valid2=0;}
-		path_release(nori);
-		if ((lflags&LOOKUP_NODIR) && valid2 && is_subdir(nd->dentry,n2->dentry) && 
-		    nd->dentry->d_inode && S_ISDIR(nd->dentry->d_inode->i_mode)) {
-			path_release(nd);
-			valid2=0;
-		}
+	i=any_valid(t->layers,valid);
+	while (i>0 && n[i].dentry==n[0].dentry) {
+		path_release(&n[i]);
+		valid[i]=0;
+		i=any_valid(i,valid);
 	}
+	while (i>0 && (lflags&LOOKUP_NODIR) &&
+	 have_inode(&n[i]) && S_ISDIR(n[i].dentry->d_inode->i_mode)) {
+		path_release(&n[i]);
+		valid[i]=0;
+		i=any_valid(i,valid);
+	}
+	for(j=i-1; j>=0; --j) if(valid[j]) path_release(&n[j]);
 	if (endp) *endp=(slash?lastnp:NULL);
-	return (!valid2);
+	return (i);
 }
 
 /* if 0 is returned no redirection could be done... 
@@ -255,53 +267,50 @@ int redirect_path_walk(char *name, char **endp,
    if 1 is returned fname will be some pathname
    if 2 is returned fname has been redirected (from n1 to n2)
 */
-int redirect_path(char *fname, struct translucent *t, const struct nameidata *n1, const struct nameidata *n2, int rflags) 
+int redirect_path(char *fname, struct translucent *t, int rflags) 
 {
 	char buf[REDIR_BUFSIZE+1],*p,*p2;
-	int i,l,error=1,result=0;
-	struct nameidata n,nori;
+	int i,l,error=1,result=0,top=-1;
+	struct nameidata n[MAX_LAYERS];
 	if ((translucent_flags & no_translucency) || !match_uids()) return 0;
 	if (t == NULL) {
-		for (i=0; i<REDIRS; i++) {
+		for (i=0; i<REDIRS; ++i) {
 			if (is_valid(&redirs[i])) {
 				t = &redirs[i];
-				n1 = &t->n1;
-				n2 = &t->n2;
-				redirect_path_init(fname,rflags,&n,&nori,n1,n2,t);
-				error = redirect_path_walk(fname,&p2,&n,&nori,n1,n2,t);
-				if (!error) break;
+				redirect_path_init(fname,rflags,n,t);
+				top = redirect_path_walk(fname,&p2,n,t);
+				if (top>0) break;
 			}
 		}
-		if (i==REDIRS) { goto out_release; }
 	} else {
-		redirect_path_init(fname,rflags,&n,&nori,n1,n2,t);
-		error = redirect_path_walk(fname,&p2,&n,&nori,n1,n2,t);
-		if (error) goto out_release;
+		redirect_path_init(fname,rflags,n,t);
+		top = redirect_path_walk(fname,&p2,n,t);
 	}
-	// if(!is_subdir(n.dentry,n2->dentry)) goto out_release;
-	p = d_path(n.dentry, n.mnt, buf, REDIR_BUFSIZE);
+	error=top<0;
+	if (error) goto out_release;
+	p = d_path(n[top].dentry, n[top].mnt, buf, REDIR_BUFSIZE);
 	l = strlen(p);
 	//strncat(p,p2,REDIR_BUFSIZE-l+(buf-p));
-	//if(is_subdir(n.dentry,n2->dentry)||is_subdir(n.dentry,n1->dentry))printk(KERN_INFO "o: %i %i %s - %s\n",error,l,p,p2);
+//	if(is_subdir(n[top].dentry,t->n[1].dentry)||is_subdir(n[top].dentry,t->n[0].dentry))printk(KERN_INFO "o: %i %i %s - %s\n",error,l,p,p2);
 	if (l >= REDIR_BUFSIZE-2) goto out_release;
 	memcpy(fname,p,l+1);
 	result=1;
-	if (is_subdir(n.dentry,n2->dentry)) ++result;
+	for(i=1; i<t->layers; ++i) if(is_subdir(n[top].dentry, t->n[i].dentry)) result=2;
 out_release:
-	if (!error) { path_release(&n); }
+	if (!error) path_release(&n[top]);
 	return result;
 }
 
 static void cleanup_translucent(struct translucent *t) 
 {
 	if (is_valid(t)) {
-		path_release(&t->n1);
-		path_release(&t->n2);
+		path_release(&t->n[0]);
+		path_release(&t->n[1]);
 		t->valid = 0;
 		memset(t->from, 0, sizeof(t->from));
 		memset(t->to,   0, sizeof(t->to));
 		memset(t->b,    0, sizeof(t->b));
-		MOD_DEC_USE_COUNT; translucent_cnt--;
+		MOD_DEC_USE_COUNT; --translucent_cnt;
 	}
 }
 
@@ -320,27 +329,20 @@ static int init_translucent(struct translucent *t)
 		}
 	}
 
-	path_init(t->from, dflags, &t->n1);
-	path_init(t->to,   dflags, &t->n2);
-
-	error = path_walk(t->from, &t->n1);
+	path_init(t->from, dflags, &t->n[0]);
+	error = path_walk(t->from, &t->n[0]);
 	if (error) return -ENOENT;
 
-	error = path_walk(t->to, &t->n2);
-	if (error || !have_inode(&t->n2)) {
-		path_release(&t->n1);
+	path_init(t->to,   dflags, &t->n[1]);
+	error = path_walk(t->to, &t->n[1]);
+	if (error || !have_inode(&t->n[1])) {
+		path_release(&t->n[0]);
 		return -ENOENT;
 	}
-
-	if (is_subdir(t->n1.dentry, t->n2.dentry))
-		t->flags |= from_is_subdir;
-
-	if (is_subdir(t->n2.dentry, t->n1.dentry))
-		t->flags |= to_is_subdir;
-
+	t->layers=2;
 	printk(KERN_INFO SYSLOGID ": mapping %d established %s -> %s\n", (int)t->index, t->from, t->to);
 	t->valid = valid_translucency;
-	MOD_INC_USE_COUNT; translucent_cnt++;
+	MOD_INC_USE_COUNT; ++translucent_cnt;
 	return 0;
 }
 
@@ -407,7 +409,7 @@ int __init translucent_init_module(void)
 	int i;
 	char *buffer_allocated=redirection_dir_table_name_buffer;
 	memset(&redirs, 0, sizeof(redirs));
-	for (i=0; i<REDIRS; i++) {
+	for (i=0; i<REDIRS; ++i) {
 		struct ctl_table new={CTL_ENTRY_BASE+i,buffer_allocated,&redirs[i].b,REDIR_BUFSIZE-1,0644,NULL,&redir_handler};
 		sprintf(buffer_allocated,"%d",i);
 		buffer_allocated+=5;

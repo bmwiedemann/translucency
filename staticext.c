@@ -33,6 +33,7 @@ int deldir(struct file *dir) {
 	return 1;
 }
 
+//TODO: generalize merging getdents for layers>2
 #define redirecting_sys_getdentsxx(a,orig,c)\
 int a(unsigned int fd, struct c *dirp, unsigned int count)\
 {\
@@ -45,16 +46,14 @@ int a(unsigned int fd, struct c *dirp, unsigned int count)\
 	f = current->files->fd[fd];\
          if (!deldir(f)) return 0;\
          for (i=0; i<REDIRS; i++) {\
-                  if (is_valid(&redirs[i])) {\
-  	                 if (!is_subdir(f->f_dentry, redirs[i].n1.dentry) || \
-	                     ((redirs[i].flags & to_is_subdir) && \
-		                is_subdir(f->f_dentry, redirs[i].n2.dentry))) continue;\
-                          break;\
-                  }\
+             if (is_valid(&redirs[i]) && \
+  	         is_subdir(f->f_dentry, redirs[i].n[0].dentry) && \
+	         (!is_subdir(redirs[i].n[1].dentry, redirs[i].n[0].dentry) || \
+		  !is_subdir(f->f_dentry, redirs[i].n[1].dentry))) break;\
          }\
          if (i == REDIRS) return 0;\
 	p = d_path(f->f_dentry, f->f_vfsmnt, buf, REDIR_BUFSIZE); memmove(buf,p,strlen(p)+1);\
-	if (redirect(&redirs[i], buf)) {\
+	if (redirect(&redirs[i], buf)==2) {\
 		int (*orig_sys_close)(int)=sys_call_table[SYS_close];\
 		BEGIN_KMEM\
 			result = orig_sys_open(buf, O_RDONLY, 0644);\
@@ -126,7 +125,7 @@ int redirecting_sys_open(const char *pathname, int oflags, mode_t mode)
 	}
 	//TODO: consider O_EXCL|O_CREAT here
 	if(strncpy_from_user(local0, pathname, REDIR_BUFSIZE)<0) return -EFAULT;
-	if((rresult=redirect_path(local0,0,0,0,dflags | extraflags))) {
+	if((rresult=redirect_path(local0,0, dflags | extraflags))) {
 		int result;
 		if(rresult>1 && (extraflags&LOOKUP_MKDIR)) redirflags|=O_CREAT; //makes clever gnu cp work which omits O_CREAT flag if previous stat returned 0
 		BEGIN_KMEM
