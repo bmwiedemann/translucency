@@ -1,4 +1,4 @@
-Copyright (C) 2001-2003 Bernhard Wiedemann (mailto:translucency@lsmod.de)
+Copyright (C) 2001-2004 Bernhard Wiedemann (mailto:translucency04 at lsmod.de)
 translucency is free software; you can redistribute it and/or modify under 
 the terms of the GNU GPL version 2, or (at your option) any later version. 
  translucency is distributed in the hope that it will be useful,
@@ -24,13 +24,10 @@ There is even a block-level translucency in the md (software RAID) package
 but that will most certainly fail for ISO9660 and other read-only filesystems.
 
 currently translucency is relatively robust within usual patterns 
-while !from_is_subdir and !to_is_subdir
 There are certainly serious buffer overflow conditions not caught
 but this stuff is mainly aimed at productivity (allowing write on CD-ROM)
 yet not on security. To be sure mount ro things that should not be changed
 or chattr -i that_file
-
-for information on params see base.h (from, to, gid, uid, flags)
 
 latest version should be available at
 http://www.informatik.hu-berlin.de/~wiedeman/development/translucency.tgz
