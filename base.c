@@ -198,22 +198,27 @@ static inline int translucent_getdents(unsigned int fd, struct dirent64 *dirp, u
         return i_Ret;
 }
 
-// declare large structures in data segment
-linked_list_t *hashtable[HASH_TABLE_SIZE];
-struct dirent64 dirents[1];
-char buf[REDIR_BUFSIZE], s_File[REDIR_BUFSIZE];
 int translucent_merge_init(int i_Layers, struct nameidata *n)
 {
         int (*sys_close)(int)=sys_call_table[__NR_close];
         off_t (*sys_lseek)(int fildes, off_t offset, int whence)=sys_call_table[__NR_lseek];
         ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[__NR_write];
         int out, i, i_Len, i_Hash, i_Bytes, b_Found, b_Whiteout;
-        linked_list_t **p_CurList, *p_Cur;
+        int i_Random, i_HashSize=HASH_TABLE_SIZE*sizeof(linked_list_t *);
+        linked_list_t **hashtable, **p_CurList, *p_Cur;
         void *p_Data;
-	struct dirent64 *cur, *cur2;
+	struct dirent64 *cur, *cur2, *dirents;
         int outfd, curdirfd, /*i_Valid=0, i_LastValid=0,*/ i_Layer;
 //        char buf[REDIR_BUFSIZE], s_File[REDIR_BUFSIZE];
-	char *p=NULL, *ps;
+	char *p=NULL, *ps, *p_VarSpace, *buf, *s_File;
+        struct task_struct *task;
+        p_VarSpace=(char *)malloc(2*REDIR_BUFSIZE+2*sizeof(struct dirent64)+i_HashSize);
+        buf=p_VarSpace; i=REDIR_BUFSIZE;
+        s_File=p_VarSpace+i; i+=REDIR_BUFSIZE;
+        dirents=(struct dirent64*)(p_VarSpace+i); i+=2*sizeof(struct dirent64);
+        hashtable=(linked_list_t **)(p_VarSpace+i);
+        memset(hashtable, 0, i_HashSize);
+        dirents[1].d_off=1;
 //        printk(SYSLOGID ": mi0\n");
 /*        for(i_Layer=0; i_Layer<i_Layers; ++i_Layer) {
                 if(n[i_Layer].dentry==NULL) continue;
@@ -222,7 +227,8 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
         }
         if(i_Valid<=1 && n[0].dentry) { // take a shortcut when there is only one layer
                 printk(SYSLOGID ": debugmi1\n");
-                return i_LastValid;
+                outfd=i_LastValid;
+                goto freeret;
         }*/
         for(i_Layer=0; i_Layer<i_Layers; i_Layer++) {
                 if(n[i_Layer].dentry==NULL) {
@@ -239,7 +245,12 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
                         printk(SYSLOGID ": opening input failed\n");
                         continue;
                 }
-                while((out=translucent_getdents(curdirfd, dirents, sizeof(dirents)))) {
+                if(dirents[1].d_off==1) {
+                        memset(&dirents[1], 0, sizeof(dirents[1]));
+                        memcpy(dirents[1].d_name, p, sizeof(dirents[1].d_name)-1);
+                        dirents[1].d_ino=valid_translucency; // use as magic number
+                }
+                while((out=translucent_getdents(curdirfd, dirents, sizeof(struct dirent64)))) {
                         if(out<0) {
                                 printk(SYSLOGID ": exception 1 %i\n", out);
                         }
@@ -248,7 +259,7 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
                                 i_Len=cur->d_reclen;
         //			printf("%8X %.8X %3i %11s \n",
         //        	        cur->d_ino, cur->d_off, cur->d_reclen, cur->d_name);
-        //                      snprintf(s_File, sizeof(s_File), "%s/%s", path[i_Layer], cur->d_name);
+        //                      snprintf(s_File, REDIR_BUFSIZE, "%s/%s", path[i_Layer], cur->d_name);
                                 strcpy(s_File, p);
                                 strcat(s_File, "/");
                                 strcat(s_File, cur->d_name);
@@ -280,25 +291,30 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
                 sys_close(curdirfd);
         }
         i_Bytes=0;
-        snprintf(s_File, sizeof(s_File), "/tmp/getdents-%i-", current->pid);
-	//TODO: add truly random component here
+        task=current;
+        i_Random=(int)p_VarSpace^(int)task->pidhash_next^(int)task->pidhash_pprev^*(&i_Random)^(int)&i_Random;
+        snprintf(s_File, REDIR_BUFSIZE, "/tmp/getdents-%i-%i", task->pid, i_Random);
         ps=p;
-        for(i=strlen(s_File); ps && *ps && (unsigned)i<sizeof(s_File)-1; ++i,++ps) {
+        for(i=strlen(s_File); ps && *ps && (unsigned)i<REDIR_BUFSIZE-1; ++i,++ps) {
                 s_File[i]=(*ps=='/')?'-':*ps; // append pathname with / substituted
         }
         s_File[i]=0;
         BEGIN_KMEM
                 outfd=orig_sys_open(s_File, O_RDWR|O_CREAT|O_TRUNC, 0666);
-		if(outfd>=0) orig_sys_unlink(s_File);
+//		if(outfd>=0) orig_sys_unlink(s_File);
         END_KMEM
-	if(outfd<0) return outfd;
+	if(outfd<0) goto freeret;
+	i_Len=sizeof(struct dirent64);
+        i_Bytes+=i_Len;
+        BEGIN_KMEM
+                sys_write(outfd, &dirents[1], i_Len);
+        END_KMEM
         for(i=0; i<HASH_TABLE_SIZE; ++i) {
             linked_list_foreach(p_Cur,hashtable[i]) {
                 cur=(struct dirent64*)linked_list_get_data(p_Cur);
                 //i_Len=cur->d_reclen; // space saving and a more human-readable file (strings /tmp/getdents...)
-		i_Len=sizeof(struct dirent64);
                 i_Bytes+=i_Len;
-                cur->d_off=i_Bytes;     // offset of next entry
+                cur->d_off=i_Bytes;     // offset of next entry - needed to lseek in our `directory'
                 BEGIN_KMEM
                         sys_write(outfd, cur, i_Len);
                 END_KMEM
@@ -307,7 +323,10 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
             linked_list_finish(&hashtable[i]);
         }
         sys_lseek(outfd, 0, 0/*SEEK_SET*/);
-        return outfd+MAX_LAYERS;
+        outfd+=MAX_LAYERS;
+freeret:
+        free(p_VarSpace);
+        return outfd;
 }
 
 void absolutize(char *name, struct dentry *d, struct vfsmount *m) {
