@@ -10,7 +10,12 @@
  * ----------------------------------------------------------------------- */
 
 #include "base.h"
-#include "linked_list.h"
+#include <linux/list.h>
+
+#ifdef __KERNEL__
+  #define malloc(x) kmalloc(x, GFP_KERNEL)
+  #define free kfree
+#endif
 
 #define LAYERS 8
 #define HASH_BITS 8
@@ -24,6 +29,12 @@ int translucent_gid   = ANYUID;
 int translucent_fs    = 0;
 int translucent_flags = 0;
 int translucent_cnt   = 0;
+
+struct hash_data_t
+{
+	struct list_head list;
+	struct dirent64 data;
+};
 
 static inline int match_uids(void)
 {
@@ -219,20 +230,21 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
         ssize_t (*sys_write)(int fd, const void *buf, size_t count)=sys_call_table[__NR_write];
         int (*sys_fchmod)(int fildes, mode_t mode)=sys_call_table[__NR_fchmod];
         int out, i, i_Len, i_Hash, i_Bytes, b_Found, b_Whiteout;
-        int i_HashSize=HASH_TABLE_SIZE*sizeof(linked_list_t *);
-        linked_list_t **hashtable, **p_CurList, *p_Cur;
-        void *p_Data;
+        int i_HashSize=HASH_TABLE_SIZE*sizeof(struct hash_data_t *);
+        struct hash_data_t *hashtable, *p_CurList, *p_Cur;
+	struct list_head *ListHead, *ListHead2;
 	struct dirent64 *cur, *cur2, *dirents;
         int outfd, curdirfd, /*i_Valid=0, i_LastValid=0,*/ i_Layer;
-//        char buf[REDIR_BUFSIZE], s_File[REDIR_BUFSIZE];
 	char *p=NULL, *ps, *p_VarSpace, *buf, *s_File;
         struct task_struct *task;
         p_VarSpace=(char *)malloc(2*REDIR_BUFSIZE+2*sizeof(struct dirent64)+i_HashSize);
         buf=p_VarSpace; i=REDIR_BUFSIZE;
         s_File=p_VarSpace+i; i+=REDIR_BUFSIZE;
         dirents=(struct dirent64*)(p_VarSpace+i); i+=2*sizeof(struct dirent64);
-        hashtable=(linked_list_t **)(p_VarSpace+i);
-        memset(hashtable, 0, i_HashSize);
+        hashtable=(struct hash_data_t *)(p_VarSpace+i);
+        for(i=0; i<HASH_TABLE_SIZE; ++i) {
+		INIT_LIST_HEAD(&(hashtable[i].list));
+	}
         dirents[1].d_off=1;
 //        printk(SYSLOGID ": mi0\n");
 /*        for(i_Layer=0; i_Layer<i_Layers; ++i_Layer) {
@@ -282,22 +294,25 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
                                 b_Whiteout=translucent_is_whiteout2(s_File);
                                 i_Hash=hash_func(cur->d_name);
                                 b_Found=0;
-                                p_CurList=&(hashtable[i_Hash]);
-                                while((p_Cur=*p_CurList)) {
-                                        cur2=linked_list_get_data(p_Cur);
+                                p_CurList=hashtable+i_Hash;
+				list_for_each_prev(ListHead, (&p_CurList->list)) {
+                                        p_Cur=list_entry(ListHead, struct hash_data_t, list);
+					cur2=&(p_Cur->data);
                                         if(strcmp(cur2->d_name,cur->d_name)==0) {
                                                 if(b_Whiteout) {
-                                                        linked_list_remove(p_CurList);
+                                                        list_del(ListHead);
+							free(p_Cur);
                                                 }
                                                 b_Found=1;
                                                 break;
                                         }
-                                        p_CurList=(linked_list_t**)&(p_Cur->next);
                                 }
                                 if(!b_Found && !b_Whiteout){
-                                    p_Data=malloc(i_Len);
-                                    memcpy(p_Data, cur, i_Len);
-                                    linked_list_insert(&(hashtable[i_Hash]), p_Data);
+//				    p_Cur=malloc(sizeof(struct list_head)+i_Len+4); // save some space
+				    p_Cur=malloc(sizeof(struct hash_data_t));
+				    INIT_LIST_HEAD(&(p_Cur->list));
+                                    memcpy(&(p_Cur->data), cur, i_Len);
+                                    list_add_tail(&(p_CurList->list), &(p_Cur->list));
                                   }
 			        cur=(struct dirent64 *)((char *)cur+i_Len);
 		        }
@@ -325,17 +340,18 @@ int translucent_merge_init(int i_Layers, struct nameidata *n)
                 sys_write(outfd, &dirents[1], i_Len);
         END_KMEM
         for(i=0; i<HASH_TABLE_SIZE; ++i) {
-            linked_list_foreach(p_Cur,hashtable[i]) {
-                cur=(struct dirent64*)linked_list_get_data(p_Cur);
+            list_for_each_safe(ListHead,ListHead2,&(hashtable[i].list)) {
+	        p_Cur=list_entry(ListHead, struct hash_data_t, list);
+                cur=&(p_Cur->data);
                 //i_Len=cur->d_reclen; // space saving and a more human-readable file (strings /tmp/getdents...)
                 i_Bytes+=i_Len;
                 cur->d_off=i_Bytes;     // offset of next entry - needed to lseek in our `directory'
                 BEGIN_KMEM
                         sys_write(outfd, cur, i_Len);
                 END_KMEM
-                free(cur);
+		list_del(ListHead);
+                free(p_Cur);
             }
-            linked_list_finish(&hashtable[i]);
         }
         sys_lseek(outfd, 0, 0/*SEEK_SET*/);
         sys_fchmod(outfd, 01444);
