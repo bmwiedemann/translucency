@@ -23,8 +23,7 @@ this file lists +pros and -cons for the translucency linux kernel module
 +avoids directory loops
 
 +merges directory listings
--overlaid files are listed twice yet (would need |sort|uniq in kernel)
 +does not need special index or container files
 +thus fast
--can not virtually delete files in from=dir (needed whiteout entries)
++can virtually delete files in from=dir (using whiteout entries)
 -can sometimes put files in wrong dir when to= is_subdir of from= or other way round (bug)
